@@ -35,6 +35,15 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="battle"
+        options={{
+          title: "Battle",
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="flame.fill" color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }

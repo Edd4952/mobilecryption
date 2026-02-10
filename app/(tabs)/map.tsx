@@ -96,7 +96,7 @@ export const sampleMapState: MapState = {
     {
       depth: 6,
       numOfNodes: 2,
-      connectiontype: ["23divergeleft"],
+      connectiontype: ["23divergeright"],
       isBattle: false,
       nodes: [nodeList[3], nodeList[4]],
     },
