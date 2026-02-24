@@ -21,14 +21,42 @@ export type Card = {
 export const sigils: Sigil[] = [
     {
         name: "Flying",
-        description: "A card with this sigil attacks the enemy directly.",
+        description: "A card bearing this sigil leaps over the opposing card and attacks the enemy directly.",
         icon: "feather",
     },
     {
         name: "Mighty Leap",
-        description: "A card with this sigil blocks flying cards.",
+        description: "A card bearing this sigil blocks flying cards.",
         icon: "shield-airplane",
+    },
+    {
+        name: "Leader",
+        description: "Creatures adjacent to a card bearing this sigil gain 1 Power.",
+        icon: "arrows-h",
+    },
+    {
+        name: "Fledgling",
+        description: "A card bearing this sigil will grow into a more powerful form after 1 turn on the board.",
+        icon: "clock",
+    },
+    {
+        name: "Sprinter",
+        description: "A card bearing this sigil will move in the direction inscribed.",
+        icon: "arrow-right",
+    },
+    {
+        name: "Sprint left",
+        description: "A card bearing this sigil will move in the direction inscribed.",
+        icon: "arrow-left",
+    },
+    {
+        name: "Bifurcated Strike",
+        description: "A card bearing this sigil will strike in the slots next to the opposing slot.",
+        icon: "call-split",
     }
+
+    
+
 ];
 
 export const sigilsByName = Object.fromEntries(
@@ -77,7 +105,7 @@ export const cards: Card[] = [
     damage: 1,
     health: 2,
     sigils: [sigilsByName["Mighty Leap"]],
-    cost: 2,
+    cost: 1,
     costType: "Blood",
 
   },
@@ -91,5 +119,87 @@ export const cards: Card[] = [
     sigils: [],
     cost: 0,
     costType: "Blood",
-  }
+  },
+  {
+    name: "Wolf",
+    class: "Canine",
+    image:
+      "https://static.wikia.nocookie.net/duelyst/images/7/7c/Hawk_card.png/revision/latest?cb=20151109004244",
+    damage: 3,
+    health: 2,
+    sigils: [],
+    cost: 2,
+    costType: "Blood",
+  },
+  {
+    name: "Coyote",
+    class: "Canine",
+    image:
+      "https://static.wikia.nocookie.net/duelyst/images/7/7c/Hawk_card.png/revision/latest?cb=20151109004244",
+    damage: 2,
+    health: 1,
+    sigils: [],
+    cost: 4,
+    costType: "Bone",
+  },
+  {
+    name: "Alpha",
+    class: "Canine",
+    image:
+      "https://static.wikia.nocookie.net/duelyst/images/7/7c/Hawk_card.png/revision/latest?cb=20151109004244",
+    damage: 1,
+    health: 2,
+    sigils: [sigilsByName["Leader"]],
+    cost: 4,
+    costType: "Bone",
+  },
+  {
+    name: "Wolf Cub",
+    class: "Canine",
+    image:
+      "https://static.wikia.nocookie.net/duelyst/images/7/7c/Hawk_card.png/revision/latest?cb=20151109004244",
+    damage: 1,
+    health: 1,
+    sigils: [sigilsByName["Fledgling"]],
+    cost: 1,
+    costType: "Blood",
+  },
+  {
+    name: "Elk",
+    class: "Hooved",
+    image:
+      "https://static.wikia.nocookie.net/duelyst/images/7/7c/Hawk_card.png/revision/latest?cb=20151109004244",
+    damage: 2,
+    health: 4,
+    sigils: [sigilsByName["Sprinter"]],
+    cost: 2,
+    costType: "Blood",
+  },
+  {
+    name: "Fawn",
+    class: "Hooved",
+    image:
+      "https://static.wikia.nocookie.net/duelyst/images/7/7c/Hawk_card.png/revision/latest?cb=20151109004244",
+    damage: 1,
+    health: 1,
+    sigils: [sigilsByName["Sprinter"], sigilsByName["Fledgling"]],
+    cost: 1,
+    costType: "Blood",
+  },
+  {
+    name: "Mantis",
+    class: "Insect",
+    image:
+      "https://static.wikia.nocookie.net/duelyst/images/7/7c/Hawk_card.png/revision/latest?cb=20151109004244",
+    damage: 1,
+    health: 1,
+    sigils: [sigilsByName["Bifurcated Strike"]],
+    cost: 1,
+    costType: "Blood",
+  },
+
+  
+  
+
+  
 ];
