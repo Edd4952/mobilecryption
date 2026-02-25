@@ -154,7 +154,7 @@ export const cards: Card[] = [
     costType: "Bone",
   },
   {
-    name: "Wolf Cub",
+    name: "Cub",
     class: "Canine",
     image:
       "https://static.wikia.nocookie.net/duelyst/images/7/7c/Hawk_card.png/revision/latest?cb=20151109004244",

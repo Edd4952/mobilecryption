@@ -11,16 +11,26 @@ type CardViewProps = {
   width?: number;
   height?: number;
   scale?: number;
+  displayDamage?: number;
 };
 
 //the minimum base height is 100
 const BASE_HEIGHT = 100;
 const BASE_WIDTH = BASE_HEIGHT * (75 / 100);
 
-export function CardView({ card, width, height, scale }: CardViewProps) {
+export function CardView({
+  card,
+  width,
+  height,
+  scale,
+  displayDamage,
+}: CardViewProps) {
   const resolvedWidth = width ?? BASE_WIDTH;
   const resolvedHeight = height ?? resolvedWidth * (BASE_HEIGHT / BASE_WIDTH);
   const resolvedScale = scale ?? resolvedWidth / BASE_WIDTH;
+  const sigilIconSize = (card.sigils.length > 1 ? 10 : 20) * resolvedScale;
+  const isBoneCost = card.costType === "Bone";
+  const renderedDamage = displayDamage ?? card.damage;
   const styles = makeStyles(resolvedScale, resolvedWidth, resolvedHeight);
 
   return (
@@ -35,25 +45,41 @@ export function CardView({ card, width, height, scale }: CardViewProps) {
           contentFit="cover"
         />
         <View style={styles.costBadge}>
-          {Array.from({ length: card.cost }).map((_, index) => (
-            <Fontisto
-              key={`blood-${index}`}
-              name="blood-drop"
-              size={16 * resolvedScale}
-              color="red"
-            />
-          ))}
+          {Array.from({ length: card.cost }).map((_, index) =>
+            isBoneCost ? (
+              <MaterialCommunityIcons
+                key={`bone-${index}`}
+                name="bone"
+                size={16 * resolvedScale}
+                color="black"
+                style={{
+                  transform: [
+                    { rotate: "90deg" },
+                    { translateX: -6 * resolvedScale },
+                  ],
+                  width: 8,
+                }}
+              />
+            ) : (
+              <Fontisto
+                key={`blood-${index}`}
+                name="blood-drop"
+                size={16 * resolvedScale}
+                color="red"
+              />
+            ),
+          )}
         </View>
       </View>
       <View style={styles.cardinfo}>
-        <ThemedText style={styles.cardinfotext}>{card.damage}</ThemedText>
+        <ThemedText style={styles.cardinfotext}>{renderedDamage}</ThemedText>
 
         <View style={styles.sigils}>
           {card.sigils.map((sigil, index) => (
             <MaterialCommunityIcons
               key={sigil.icon ?? `sigil-${index}`}
               name={sigil.icon as keyof typeof MaterialCommunityIcons.glyphMap}
-              size={20 * resolvedScale}
+              size={sigilIconSize}
               color={"#ffffff"}
             />
           ))}

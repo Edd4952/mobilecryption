@@ -15,7 +15,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { Card, cards } from "../cards";
+import { Card, cards, sigilsByName } from "../cards";
 import { deck } from "./deck";
 
 type BattleCard = Card & {
@@ -28,6 +28,7 @@ export default function Battle() {
   const [hand, setHand] = useState<BattleCard[]>([]);
   const [drawPile, setDrawPile] = useState<BattleCard[]>([]);
   const [score, setScore] = useState(5);
+  const [bones, setBones] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
   const [mustDrawCard, setMustDrawCard] = useState(false);
   const [gameOver, setGameOver] = useState(false);
@@ -45,7 +46,6 @@ export default function Battle() {
   const slotY = useRef<Animated.Value[]>(
     Array.from({ length: 12 }, () => new Animated.Value(0)),
   ).current;
-  const squirrelButtonOpacity = useRef(new Animated.Value(1)).current;
   const drawButtonOpacity = useRef(new Animated.Value(1)).current;
   const placeableSlots = useMemo(() => new Set([8, 9, 10, 11]), []);
   const squirrelCard = useMemo(
@@ -58,8 +58,8 @@ export default function Battle() {
   );
   const evolvedByName = useMemo(
     () => ({
-      "Wolf Cub": cards.find((card) => card.name === "Wolf") ?? null,
-      "Elk Fawn": cards.find((card) => card.name === "Elk") ?? null,
+      Cub: cards.find((card) => card.name === "Wolf") ?? null,
+      Fawn: cards.find((card) => card.name === "Elk") ?? null,
     }),
     [],
   );
@@ -79,6 +79,7 @@ export default function Battle() {
     fromName: string,
     toName: string,
   ): BattleCard => {
+    const nextSigilTemplate = sigilsByName[toName];
     let changed = false;
     const nextSigils = card.sigils.map((sigil) => {
       if (sigil.name !== fromName) {
@@ -88,6 +89,7 @@ export default function Battle() {
       return {
         ...sigil,
         name: toName,
+        icon: nextSigilTemplate?.icon ?? sigil.icon,
       };
     });
 
@@ -157,29 +159,57 @@ export default function Battle() {
     const reservedTargets = new Set<number>();
 
     for (let slot = 8; slot <= 11; slot += 1) {
-      const card = localSlots[slot];
-      if (!card) {
+      const originalCard = localSlots[slot];
+      if (!originalCard) {
         continue;
       }
 
+      let card = originalCard;
+      let direction: -1 | 1 | null = null;
+
       if (hasSigil(card, "Sprinter")) {
-        const target = slot + 1;
-        if (
-          target <= 11 &&
-          !localSlots[target] &&
-          !reservedTargets.has(target)
-        ) {
-          moveIntents.push({ from: slot, to: target });
-          reservedTargets.add(target);
-        }
+        direction = 1;
+      } else if (hasSigil(card, "Sprint left")) {
+        direction = -1;
       }
 
-      if (hasSigil(card, "Sprint left")) {
-        const target = slot - 1;
-        if (target >= 8 && !localSlots[target] && !reservedTargets.has(target)) {
-          moveIntents.push({ from: slot, to: target });
-          reservedTargets.add(target);
+      if (direction === null) {
+        continue;
+      }
+
+      const reverseDirection = () => {
+        if (direction === 1) {
+          card = setSigilName(card, "Sprinter", "Sprint left");
+          direction = -1;
+        } else {
+          card = setSigilName(card, "Sprint left", "Sprinter");
+          direction = 1;
         }
+        nextSlots[slot] = card;
+      };
+
+      const canMoveTo = (target: number) =>
+        target >= 8 &&
+        target <= 11 &&
+        !localSlots[target] &&
+        !reservedTargets.has(target);
+
+      if (
+        (slot === 11 && direction === 1) ||
+        (slot === 8 && direction === -1)
+      ) {
+        reverseDirection();
+      }
+
+      let target = slot + direction;
+      if (!canMoveTo(target)) {
+        reverseDirection();
+        target = slot + direction;
+      }
+
+      if (canMoveTo(target)) {
+        moveIntents.push({ from: slot, to: target });
+        reservedTargets.add(target);
       }
     }
 
@@ -187,20 +217,6 @@ export default function Battle() {
       nextSlots[to] = nextSlots[from];
       nextSlots[from] = null;
     });
-
-    for (let slot = 8; slot <= 11; slot += 1) {
-      const card = nextSlots[slot];
-      if (!card) {
-        continue;
-      }
-
-      if (slot === 11 && hasSigil(card, "Sprinter")) {
-        nextSlots[slot] = setSigilName(card, "Sprinter", "Sprint left");
-      }
-      if (slot === 8 && hasSigil(card, "Sprint left")) {
-        nextSlots[slot] = setSigilName(card, "Sprint left", "Sprinter");
-      }
-    }
 
     return nextSlots;
   };
@@ -225,10 +241,23 @@ export default function Battle() {
         !nextCard.fledglingUsed &&
         turnsOnBoard >= 1
       ) {
-        const evolvedTemplate = evolvedByName[nextCard.name as "Wolf Cub" | "Elk Fawn"];
+        const evolvedTemplate = evolvedByName[nextCard.name as "Cub" | "Fawn"];
         if (evolvedTemplate) {
+          const sourceWasSprintLeft = hasSigil(nextCard, "Sprint left");
+          const sourceWasSprinter = hasSigil(nextCard, "Sprinter");
+          let evolvedCard = cloneCard(evolvedTemplate);
+
+          if (sourceWasSprintLeft && hasSigil(evolvedCard, "Sprinter")) {
+            evolvedCard = setSigilName(evolvedCard, "Sprinter", "Sprint left");
+          } else if (
+            sourceWasSprinter &&
+            hasSigil(evolvedCard, "Sprint left")
+          ) {
+            evolvedCard = setSigilName(evolvedCard, "Sprint left", "Sprinter");
+          }
+
           nextCard = {
-            ...cloneCard(evolvedTemplate),
+            ...evolvedCard,
             turnsOnBoard,
             fledglingUsed: true,
           };
@@ -263,6 +292,7 @@ export default function Battle() {
         : startingBattleHand,
     );
     setDrawPile(shuffledDeck.slice(3).map((card) => cloneCard(card)));
+    setBones(0);
     setSelectedIndex(null);
     setSlotCards(Array.from({ length: 12 }, () => null));
   }, [squirrelCard]);
@@ -311,6 +341,20 @@ export default function Battle() {
       return;
     }
 
+    if (card.costType === "Bone") {
+      if (bones >= card.cost) {
+        setSelectedIndex(index);
+        setSacrificeRequired(0);
+        setSacrificeSlots([]);
+        return;
+      }
+
+      setSelectedIndex(null);
+      setSacrificeRequired(0);
+      setSacrificeSlots([]);
+      return;
+    }
+
     const cardsOnTable = [...placeableSlots].filter(
       (slotIndex) => slotCards[slotIndex],
     ).length;
@@ -354,8 +398,31 @@ export default function Battle() {
       return;
     }
 
+    if (cardToPlace.costType === "Bone") {
+      if (slotCards[slotIndex]) {
+        return;
+      }
+
+      if (bones < cardToPlace.cost) {
+        return;
+      }
+
+      setSlotCards((current) => {
+        const next = [...current];
+        next[slotIndex] = cardToPlace;
+        return next;
+      });
+      setBones((currentBones) => currentBones - cardToPlace.cost);
+      setHand((current) => current.filter((_, idx) => idx !== selectedIndex));
+      setSelectedIndex(null);
+      setSacrificeRequired(0);
+      setSacrificeSlots([]);
+      return;
+    }
+
     if (cardToPlace.cost > 0) {
       if (slotCards[slotIndex]) {
+        setBones((currentBones) => currentBones + 1);
         setSlotCards((current) => {
           const next = [...current];
           next[slotIndex] = null;
@@ -465,21 +532,76 @@ export default function Battle() {
         c ? cloneCard(c) : null,
       );
 
-      const applyDirectDamage = async (amount: number, isPlayerAttack: boolean) => {
+      const applyDirectDamage = async (
+        amount: number,
+        isPlayerAttack: boolean,
+      ) => {
         for (let d = 0; d < amount; d += 1) {
           setScore((s) => (isPlayerAttack ? s + 1 : s - 1));
           await delay(250);
         }
       };
 
-      const strikeTargets = async (attackerSlot: number, isPlayerAttack: boolean) => {
+      const getBehindSlot = (targetSlot: number) => {
+        if (targetSlot >= 4 && targetSlot <= 7) {
+          return targetSlot - 4;
+        }
+        return null;
+      };
+
+      const applyDamageToDefenderWithOverflow = async (
+        targetSlot: number,
+        amount: number,
+      ) => {
+        const defender = localSlots[targetSlot];
+        if (!defender || amount <= 0) {
+          return;
+        }
+
+        const newHealth = defender.health - amount;
+        if (newHealth > 0) {
+          localSlots[targetSlot] = { ...defender, health: newHealth };
+          setSlotCards([...localSlots]);
+          await delay(60);
+          return;
+        }
+
+        if (targetSlot >= 8 && targetSlot <= 11) {
+          setBones((currentBones) => currentBones + 1);
+        }
+        localSlots[targetSlot] = null;
+        setSlotCards([...localSlots]);
+        await delay(60);
+
+        const overflowDamage = Math.abs(newHealth);
+        const behindSlot = getBehindSlot(targetSlot);
+        if (
+          behindSlot === null ||
+          overflowDamage <= 0 ||
+          !localSlots[behindSlot]
+        ) {
+          return;
+        }
+
+        await applyDamageToDefenderWithOverflow(behindSlot, overflowDamage);
+      };
+
+      const strikeTargets = async (
+        attackerSlot: number,
+        isPlayerAttack: boolean,
+      ) => {
         const attacker = localSlots[attackerSlot];
         if (!attacker) {
           return;
         }
 
-        const damage = attacker.damage + getLeaderBonus(localSlots, attackerSlot);
-        const targets = getAttackTargets(localSlots, attackerSlot, isPlayerAttack);
+        const damage =
+          attacker.damage + getLeaderBonus(localSlots, attackerSlot);
+        const targets = getAttackTargets(
+          localSlots,
+          attackerSlot,
+          isPlayerAttack,
+        );
 
         for (const targetSlot of targets) {
           const defender = localSlots[targetSlot];
@@ -492,14 +614,7 @@ export default function Battle() {
             continue;
           }
 
-          const newHealth = defender.health - damage;
-          if (newHealth <= 0) {
-            localSlots[targetSlot] = null;
-          } else {
-            localSlots[targetSlot] = { ...defender, health: newHealth };
-          }
-          setSlotCards([...localSlots]);
-          await delay(60);
+          await applyDamageToDefenderWithOverflow(targetSlot, damage);
         }
       };
 
@@ -607,6 +722,9 @@ export default function Battle() {
         <View style={styles.table}>
           {slots.map((id) => {
             const cardInSlot = slotCards[id];
+            const displayedDamage = cardInSlot
+              ? cardInSlot.damage + getLeaderBonus(slotCards, id)
+              : undefined;
             const isPlaceable = placeableSlots.has(id);
             const isSacrificeMode =
               selectedIndex !== null && sacrificeRequired > 0;
@@ -642,6 +760,7 @@ export default function Battle() {
                       card={cardInSlot}
                       width={slotSize?.width}
                       height={slotSize?.height}
+                      displayDamage={displayedDamage}
                     />
                   ) : (
                     <FontAwesome name="paw" size={24} color="#4c2a0d" />
@@ -685,25 +804,45 @@ export default function Battle() {
             paddingHorizontal: 16,
           }}
         >
-          <Pressable
-            style={{
-              padding: 12,
-              backgroundColor: "#ffe45c",
-              borderRadius: 4,
-              height: 92,
-              width: 92,
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-            onPress={handlePlayRound}
-            disabled={
-              isAnimating ||
-              mustDrawCard ||
-              (selectedIndex !== null && sacrificeSlots.length > 0)
-            }
-          >
-            <FontAwesome6 name="bell-concierge" size={36} color="black" />
-          </Pressable>
+          <View style={{ flexDirection: "row", gap: 4 }}>
+            <Pressable
+              style={{
+                padding: 12,
+                backgroundColor: "#ffe45c",
+                borderRadius: 4,
+                height: 92,
+                width: 92,
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+              onPress={handlePlayRound}
+              disabled={
+                isAnimating ||
+                mustDrawCard ||
+                (selectedIndex !== null && sacrificeSlots.length > 0)
+              }
+            >
+              <FontAwesome6 name="bell-concierge" size={36} color="black" />
+            </Pressable>
+            <View
+              style={{
+                height: 92,
+                minWidth: 76,
+                borderRadius: 4,
+                borderWidth: 2,
+                borderColor: "#ffffff",
+                justifyContent: "center",
+                alignItems: "center",
+                paddingHorizontal: 8,
+                gap: 2,
+              }}
+            >
+              <MaterialCommunityIcons name="bone" size={26} color="white" />
+              <ThemedText style={{ color: "#fff", fontWeight: "bold" }}>
+                {bones}
+              </ThemedText>
+            </View>
+          </View>
           {/*grab more cards*/}
           <Animated.View
             style={{ opacity: drawButtonOpacity, flexDirection: "row", gap: 4 }}
@@ -721,7 +860,7 @@ export default function Battle() {
               onPress={handleAddSquirrel}
               disabled={isAnimating || !mustDrawCard}
             >
-              <Animated.View style={{ opacity: squirrelButtonOpacity }}>
+              <Animated.View style={{}}>
                 <Octicons name="squirrel" size={36} color="black" />
               </Animated.View>
             </Pressable>
@@ -739,7 +878,7 @@ export default function Battle() {
                 onPress={handleDrawCard}
                 disabled={isAnimating || !mustDrawCard}
               >
-                <Animated.View style={{ opacity: drawButtonOpacity }}>
+                <Animated.View style={{}}>
                   <MaterialCommunityIcons
                     name="cards-playing-outline"
                     size={36}
