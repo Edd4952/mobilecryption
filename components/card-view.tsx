@@ -1,10 +1,11 @@
 import { Card } from "@/app/cards";
 import { ThemedText } from "@/components/themed-text";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import Fontisto from "@expo/vector-icons/Fontisto";
 import { Image } from "expo-image";
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 type CardViewProps = {
   card: Card;
@@ -12,6 +13,7 @@ type CardViewProps = {
   height?: number;
   scale?: number;
   displayDamage?: number;
+  onInfoPress?: (card: Card) => void;
 };
 
 //the minimum base height is 100
@@ -24,6 +26,7 @@ export function CardView({
   height,
   scale,
   displayDamage,
+  onInfoPress,
 }: CardViewProps) {
   const resolvedWidth = width ?? BASE_WIDTH;
   const resolvedHeight = height ?? resolvedWidth * (BASE_HEIGHT / BASE_WIDTH);
@@ -32,6 +35,28 @@ export function CardView({
   const isBoneCost = card.costType === "Bone";
   const renderedDamage = displayDamage ?? card.damage;
   const styles = makeStyles(resolvedScale, resolvedWidth, resolvedHeight);
+
+  const renderSigilIcon = (sigil: Card["sigils"][number], index: number) => {
+    if (sigil.iconLibrary === "FontAwesome6") {
+      return (
+        <FontAwesome6
+          key={`${sigil.name}-${index}`}
+          name={sigil.icon as keyof typeof FontAwesome6.glyphMap}
+          size={sigilIconSize}
+          color="#ffffff"
+        />
+      );
+    }
+
+    return (
+      <MaterialCommunityIcons
+        key={`${sigil.name}-${index}`}
+        name={sigil.icon as keyof typeof MaterialCommunityIcons.glyphMap}
+        size={sigilIconSize}
+        color="#ffffff"
+      />
+    );
+  };
 
   return (
     <View style={styles.card}>
@@ -71,22 +96,19 @@ export function CardView({
           )}
         </View>
       </View>
-      <View style={styles.cardinfo}>
+      <Pressable
+        style={styles.cardinfo}
+        disabled={!onInfoPress}
+        onPress={() => onInfoPress?.(card)}
+      >
         <ThemedText style={styles.cardinfotext}>{renderedDamage}</ThemedText>
 
         <View style={styles.sigils}>
-          {card.sigils.map((sigil, index) => (
-            <MaterialCommunityIcons
-              key={sigil.icon ?? `sigil-${index}`}
-              name={sigil.icon as keyof typeof MaterialCommunityIcons.glyphMap}
-              size={sigilIconSize}
-              color={"#ffffff"}
-            />
-          ))}
+          {card.sigils.map((sigil, index) => renderSigilIcon(sigil, index))}
         </View>
 
         <ThemedText style={styles.cardinfotext}>{card.health}</ThemedText>
-      </View>
+      </Pressable>
     </View>
   );
 }

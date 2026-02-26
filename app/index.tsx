@@ -26,18 +26,7 @@ const HomePage = () => {
           <Text style={[styles.text, { color: c.text }]}>Continue</Text>
         </Link>
         {/* Continue game */}
-        <Pressable
-          style={[styles.button2]}
-          onPress={() =>
-            router.push({
-              pathname: "/(tabs)/map",
-              params: { mode: "saved" },
-            })
-          }
-        >
-          <Text style={[styles.text, { color: c.text }]}>Saved Schematics</Text>
-        </Pressable>
-        {/* New game will add button later */}
+        
         
       </View>
     </View>

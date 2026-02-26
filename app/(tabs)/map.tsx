@@ -102,18 +102,12 @@ export const sampleMapState: MapState = {
     },
     {
       depth: 7,
-      numOfNodes: 3,
-      connectiontype: ["x-1"],
-      isBattle: false,
-      nodes: [nodeList[3], nodeList[4], nodeList[2]],
-    },
-    {
-      depth: 8,
       numOfNodes: 1,
-      connectiontype: ["1-x"],
+      connectiontype: ["x-1"],
       isBattle: true,
       nodes: [nodeList[5]],
     },
+    
   ],
 };
 
