@@ -1,6 +1,7 @@
 import { ThemedText } from "@/components/themed-text";
 import { Fonts } from "@/constants/theme";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Animated, Easing, Pressable, StyleSheet, View } from "react-native";
 import Svg, { Line } from "react-native-svg";
@@ -107,7 +108,6 @@ export const sampleMapState: MapState = {
       isBattle: true,
       nodes: [nodeList[5]],
     },
-    
   ],
 };
 
@@ -182,6 +182,7 @@ const resolveConnectionMatrix = (
 };
 
 export default function MapScreen() {
+  const router = useRouter();
   const orderedBreaks = useMemo(
     () => [...sampleMapState.breaks].sort((a, b) => a.depth - b.depth),
     [],
@@ -444,6 +445,9 @@ export default function MapScreen() {
                       nodeIndex: idx,
                       nodeInstanceId,
                     });
+                    if (row.isBattle) {
+                      router.push("/(tabs)/battle");
+                    }
                   }}
                   onLayout={(event) => {
                     if (!node) return;

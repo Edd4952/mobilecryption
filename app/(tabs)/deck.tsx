@@ -5,4 +5,8 @@ export const deck: Card[] = cards.slice(6);
 
 export const trinketDeck: Trinket[] = [...trinkets];
 
-export const startingTrinketSlots: (Trinket | null)[] = [null, null, null];
+export const startingTrinketSlots: (Trinket | null)[] = [
+  trinkets[0],
+  trinkets[1],
+  null,
+];

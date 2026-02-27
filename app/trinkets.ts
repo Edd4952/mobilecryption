@@ -2,10 +2,17 @@ export type Trinket = {
   name: string;
   description: string;
   icon: string;
-  iconLibrary?: "MaterialCommunityIcons" | "FontAwesome6";
+  iconLibrary?: "MaterialCommunityIcons" | "FontAwesome6" | "Octicons";
 };
 
 export const trinkets: Trinket[] = [
+  {
+    name: "Bottle Squirrel",
+    description: "Add a Squirrel to your hand. One-time use.",
+    icon: "squirrel",
+    iconLibrary: "Octicons",
+
+  },
   {
     name: "Pliers",
     description: "Deal 1 direct damage to the opponent scale. One-time use.",
@@ -31,12 +38,6 @@ export const trinkets: Trinket[] = [
     name: "Fan",
     description: "Your cards gain Flying for this turn. One-time use.",
     icon: "fan",
-    iconLibrary: "FontAwesome6",
-  },
-  {
-    name: "Bottle Squirrel",
-    description: "Add a Squirrel to your hand. One-time use.",
-    icon: "squirrel",
     iconLibrary: "FontAwesome6",
   },
 ];

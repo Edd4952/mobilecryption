@@ -149,7 +149,15 @@ export default function Battle() {
         />
       );
     }
-
+    if (trinket.iconLibrary === "Octicons") {
+      return (
+        <Octicons
+          name={trinket.icon as keyof typeof Octicons.glyphMap}
+          size={55}
+          color="#ffffff"
+        />
+      );
+    }
     return (
       <MaterialCommunityIcons
         name={trinket.icon as keyof typeof MaterialCommunityIcons.glyphMap}
@@ -1370,9 +1378,11 @@ export default function Battle() {
                         {renderTrinketIcon(trinket)}
                       </>
                     ) : (
-                      <ThemedText style={styles.trinketSlotText}>
-                        Empty
-                      </ThemedText>
+                      <MaterialCommunityIcons
+                        name="checkbox-blank-outline"
+                        size={28}
+                        color="#ffffff"
+                      />
                     )}
                   </Pressable>
                 );

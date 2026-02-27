@@ -96,19 +96,20 @@ export function CardView({
           )}
         </View>
       </View>
-      <Pressable
-        style={styles.cardinfo}
-        disabled={!onInfoPress}
-        onPress={() => onInfoPress?.(card)}
-      >
+      <View style={styles.cardinfo}>
         <ThemedText style={styles.cardinfotext}>{renderedDamage}</ThemedText>
 
-        <View style={styles.sigils}>
+        <Pressable
+          style={styles.sigils}
+          disabled={!onInfoPress || card.sigils.length === 0}
+          onPress={() => onInfoPress?.(card)}
+          hitSlop={6}
+        >
           {card.sigils.map((sigil, index) => renderSigilIcon(sigil, index))}
-        </View>
+        </Pressable>
 
         <ThemedText style={styles.cardinfotext}>{card.health}</ThemedText>
-      </Pressable>
+      </View>
     </View>
   );
 }
