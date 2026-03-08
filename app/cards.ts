@@ -86,17 +86,6 @@ export const sigilsByName = Object.fromEntries(
 
 export const cards: Card[] = [
   {
-    name: "Squirrel",
-    class: "Miscellaneous",
-    image:
-      "https://static.wikia.nocookie.net/duelyst/images/7/7c/Hawk_card.png/revision/latest?cb=20151109004244",
-    damage: 0,
-    health: 1,
-    sigils: [],
-    cost: 0,
-    costType: "Blood",
-  },
-  {
     name: "Stoat",
     class: "Miscellaneous",
     image:
@@ -290,7 +279,7 @@ export const cards: Card[] = [
       "https://static.wikia.nocookie.net/duelyst/images/7/7c/Hawk_card.png/revision/latest?cb=20151109004244",
     damage: 1,
     health: 2,
-    sigils: [sigilsByName["Loose Tail"]],
+    sigils: [sigilsByName["Tailwind"]],
     cost: 1,
     costType: "Blood",
   },
@@ -303,6 +292,19 @@ export const cards: Card[] = [
     health: 6,
     sigils: [],
     cost: 3,
+    costType: "Blood",
+  },
+];
+export const miscCards: Card[] = [
+  {
+    name: "Squirrel",
+    class: "Miscellaneous",
+    image:
+      "https://static.wikia.nocookie.net/duelyst/images/7/7c/Hawk_card.png/revision/latest?cb=20151109004244",
+    damage: 0,
+    health: 1,
+    sigils: [],
+    cost: 0,
     costType: "Blood",
   },
 ];

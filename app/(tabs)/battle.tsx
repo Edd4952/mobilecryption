@@ -6,7 +6,15 @@ import {
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import Octicons from "@expo/vector-icons/Octicons";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
+import { useRouter } from "expo-router";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Animated,
   Easing,
@@ -17,9 +25,9 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { Card, cards, sigils, sigilsByName } from "../cards";
+import { Card, cards, miscCards, sigils, sigilsByName } from "../cards";
+import { useGameRun } from "../game-state";
 import { type Trinket } from "../trinkets";
-import { deck, startingTrinketSlots } from "./deck";
 
 type BattleCard = Card & {
   turnsOnBoard?: number;
@@ -35,7 +43,37 @@ type LevelTypeName =
   | "reptiles"
   | "one bear";
 
-type LevelDifficulty = 1 | 2 | 3;
+type LevelDifficulty = 1 | 2 | 3 | 4 | 5;
+
+const MIN_SPAWN_ROUNDS = 5;
+const MAX_SPAWN_ROUNDS = 10;
+
+const randomInt = (min: number, max: number) =>
+  Math.floor(Math.random() * (max - min + 1)) + min;
+
+const getSpawnCountForDifficulty = (
+  difficulty: LevelDifficulty,
+  roundNumber: number,
+) => {
+  if (roundNumber < 1) return 0;
+
+  switch (difficulty) {
+    case 1:
+      return roundNumber % 2 === 1 ? 1 : 0;
+    case 2:
+      return roundNumber % 3 === 0 ? 0 : 1;
+    case 3:
+      return roundNumber % 2 === 1 ? randomInt(1, 2) : 0;
+    case 4: {
+      const cycle = [2, 1, 0] as const;
+      return cycle[(roundNumber - 1) % cycle.length];
+    }
+    case 5:
+      return 2;
+    default:
+      return 1;
+  }
+};
 
 const LEVEL_POOLS: Record<LevelTypeName, string[]> = {
   hooved: ["Elk", "Fawn", "Porcupine"],
@@ -47,9 +85,17 @@ const LEVEL_POOLS: Record<LevelTypeName, string[]> = {
   "one bear": ["Bear"],
 };
 
+const LEVEL_TYPE_NAMES = Object.keys(LEVEL_POOLS) as LevelTypeName[];
+
 const ANT_RULE_KEY = "Ant Power";
 
 export default function Battle() {
+  const router = useRouter();
+  const { gameRun, markRunEnded, setTrinkets } = useGameRun();
+  const markRunEndedRef = useRef(markRunEnded);
+  const setTrinketsRef = useRef(setTrinkets);
+  const gameRunDeckRef = useRef(gameRun.deck);
+  const gameRunTrinketsRef = useRef(gameRun.trinkets);
   const slots = Array.from({ length: 12 }, (_, idx) => idx);
   const trinketSlots = Array.from({ length: 3 }, (_, idx) => idx);
   const [hand, setHand] = useState<BattleCard[]>([]);
@@ -69,7 +115,7 @@ export default function Battle() {
     null,
   );
   const [heldTrinkets, setHeldTrinkets] = useState<(Trinket | null)[]>(() =>
-    startingTrinketSlots.map((trinket) => (trinket ? { ...trinket } : null)),
+    gameRun.trinkets.map((trinket) => (trinket ? { ...trinket } : null)),
   );
   const [pendingScissorsTarget, setPendingScissorsTarget] = useState(false);
   const [skipOpponentAttackPhase, setSkipOpponentAttackPhase] = useState(false);
@@ -84,19 +130,32 @@ export default function Battle() {
   const [slotCards, setSlotCards] = useState<(BattleCard | null)[]>(
     Array.from({ length: 12 }, () => null),
   );
+  const battleRoundRef = useRef(1);
+  const spawnRoundsCompletedRef = useRef(0);
+  const spawnRoundsCapRef = useRef(
+    randomInt(MIN_SPAWN_ROUNDS, MAX_SPAWN_ROUNDS),
+  );
+  const oneBearHasSpawnedRef = useRef(false);
+  const hasHandledGameOverRef = useRef(false);
+  const battleDeckAtStartRef = useRef<Card[]>([]);
   const slotY = useRef<Animated.Value[]>(
     Array.from({ length: 12 }, () => new Animated.Value(0)),
   ).current;
   const rulebookScrollRef = useRef<ScrollView | null>(null);
   const rulebookOffsetsRef = useRef<Record<string, number>>({});
   const drawButtonOpacity = useRef(new Animated.Value(1)).current;
+  const scoreRef = useRef(score);
   const placeableSlots = useMemo(() => new Set([8, 9, 10, 11]), []);
+  const isFocused = useIsFocused();
+  const [battleOpenCount, setBattleOpenCount] = useState(0);
   ////////////////////////////////////////////////////////////
-  const [levelType] = useState<LevelTypeName>("hooved");
-  const [levelDifficulty] = useState<LevelDifficulty>(2);
+  const [levelType, setLevelType] = useState<LevelTypeName>(
+    () => LEVEL_TYPE_NAMES[randomInt(0, LEVEL_TYPE_NAMES.length - 1)],
+  );
+  const [levelDifficulty] = useState<LevelDifficulty>(1);
   ////////////////////////////////////////////////////////////
   const squirrelCard = useMemo(
-    () => cards.find((card) => card.name === "Squirrel") ?? null,
+    () => miscCards.find((card) => card.name === "Squirrel") ?? null,
     [],
   );
   const enemySpawnPool = useMemo(() => {
@@ -511,51 +570,155 @@ export default function Battle() {
     return nextSlots;
   };
 
-  useEffect(() => {
-    const shuffledDeck = [...deck];
-    for (let i = shuffledDeck.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffledDeck[i], shuffledDeck[j]] = [shuffledDeck[j], shuffledDeck[i]];
-    }
+  const cloneTrinketState = (slots: (Trinket | null)[]) =>
+    slots.map((trinket) => (trinket ? { ...trinket } : null));
 
-    const startingHand = shuffledDeck.slice(0, 3);
-    const startingBattleHand = startingHand.map((card) => cloneCard(card));
-    setHand(
-      squirrelCard
-        ? [...startingBattleHand, cloneCard(squirrelCard)]
-        : startingBattleHand,
-    );
-    setDrawPile(shuffledDeck.slice(3).map((card) => cloneCard(card)));
-    setBones(0);
-    setSelectedIndex(null);
-    setHeldTrinkets(
-      startingTrinketSlots.map((trinket) => (trinket ? { ...trinket } : null)),
-    );
+  const initializeBattleState = useCallback(
+    (deckSource: Card[], trinketsSource: (Trinket | null)[]) => {
+      const clonedDeck = deckSource.map((card) => ({
+        ...card,
+        sigils: card.sigils.map((sigil) => ({ ...sigil })),
+      }));
+      battleDeckAtStartRef.current = clonedDeck;
 
-    const initialSlots: (BattleCard | null)[] = Array.from(
-      { length: 12 },
-      () => null,
-    );
-    const emptyTopSlots = [0, 1, 2, 3];
-
-    if (enemySpawnPool.length > 0 && emptyTopSlots.length > 0) {
-      const spawnCap =
-        levelType === "one bear"
-          ? 1
-          : Math.max(1, Math.min(3, levelDifficulty));
-      const cardsToSpawn = Math.min(spawnCap, emptyTopSlots.length);
-
-      for (let i = 0; i < cardsToSpawn; i += 1) {
-        const slotIndex = Math.floor(Math.random() * emptyTopSlots.length);
-        const selectedSlot = emptyTopSlots.splice(slotIndex, 1)[0];
-        const enemyIndex = Math.floor(Math.random() * enemySpawnPool.length);
-        const enemyTemplate = enemySpawnPool[enemyIndex];
-        initialSlots[selectedSlot] = cloneCard(enemyTemplate);
+      const shuffledDeck = [...clonedDeck];
+      for (let i = shuffledDeck.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledDeck[i], shuffledDeck[j]] = [shuffledDeck[j], shuffledDeck[i]];
       }
+
+      const startingHand = shuffledDeck.slice(0, 3);
+      const startingBattleHand = startingHand.map((card) => cloneCard(card));
+
+      setHand(
+        squirrelCard
+          ? [...startingBattleHand, cloneCard(squirrelCard)]
+          : startingBattleHand,
+      );
+      setDrawPile(shuffledDeck.slice(3).map((card) => cloneCard(card)));
+      setBones(0);
+      setScore(5);
+      setSelectedIndex(null);
+      setSacrificeRequired(0);
+      setSacrificeSlots([]);
+      setPendingScissorsTarget(false);
+      setSkipOpponentAttackPhase(false);
+      setFanActive(false);
+      setMustDrawCard(false);
+      setIsAnimating(false);
+      setGameOver(false);
+      setGameResult(null);
+      hasHandledGameOverRef.current = false;
+      setSelectedTrinketSlot(null);
+      setHeldTrinkets(cloneTrinketState(trinketsSource));
+
+      const initialSlots: (BattleCard | null)[] = Array.from(
+        { length: 12 },
+        () => null,
+      );
+      const emptyTopSlots = [0, 1, 2, 3];
+
+      battleRoundRef.current = 1;
+      spawnRoundsCompletedRef.current = 0;
+      spawnRoundsCapRef.current = randomInt(MIN_SPAWN_ROUNDS, MAX_SPAWN_ROUNDS);
+      oneBearHasSpawnedRef.current = false;
+
+      const openingSpawnCount =
+        spawnRoundsCompletedRef.current < spawnRoundsCapRef.current
+          ? getSpawnCountForDifficulty(levelDifficulty, battleRoundRef.current)
+          : 0;
+      const adjustedOpeningSpawnCount =
+        levelType === "one bear"
+          ? oneBearHasSpawnedRef.current
+            ? 0
+            : Math.min(1, openingSpawnCount)
+          : openingSpawnCount;
+
+      if (adjustedOpeningSpawnCount > 0) {
+        spawnRoundsCompletedRef.current += 1;
+      }
+      battleRoundRef.current += 1;
+
+      if (enemySpawnPool.length > 0 && emptyTopSlots.length > 0) {
+        const cardsToSpawn = Math.min(
+          adjustedOpeningSpawnCount,
+          emptyTopSlots.length,
+        );
+
+        let spawnedAnyCard = false;
+        for (let i = 0; i < cardsToSpawn; i += 1) {
+          const slotIndex = Math.floor(Math.random() * emptyTopSlots.length);
+          const selectedSlot = emptyTopSlots.splice(slotIndex, 1)[0];
+          const enemyIndex = Math.floor(Math.random() * enemySpawnPool.length);
+          const enemyTemplate = enemySpawnPool[enemyIndex];
+          initialSlots[selectedSlot] = cloneCard(enemyTemplate);
+          spawnedAnyCard = true;
+        }
+
+        if (levelType === "one bear" && spawnedAnyCard) {
+          oneBearHasSpawnedRef.current = true;
+        }
+      }
+
+      setSlotCards(initialSlots);
+    },
+    [enemySpawnPool, levelDifficulty, levelType, squirrelCard],
+  );
+
+  useEffect(() => {
+    gameRunDeckRef.current = gameRun.deck;
+    gameRunTrinketsRef.current = gameRun.trinkets;
+  }, [gameRun.deck, gameRun.trinkets]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const nextLevelType =
+        LEVEL_TYPE_NAMES[randomInt(0, LEVEL_TYPE_NAMES.length - 1)];
+      setLevelType(nextLevelType);
+      setBattleOpenCount((current) => current + 1);
+    }, []),
+  );
+
+  useEffect(() => {
+    if (!isFocused || battleOpenCount === 0) {
+      return;
     }
 
-    setSlotCards(initialSlots);
-  }, [squirrelCard, enemySpawnPool, levelDifficulty, levelType]);
+    initializeBattleState(gameRunDeckRef.current, gameRunTrinketsRef.current);
+  }, [battleOpenCount, initializeBattleState, isFocused]);
+
+  useEffect(() => {
+    markRunEndedRef.current = markRunEnded;
+    setTrinketsRef.current = setTrinkets;
+  }, [markRunEnded, setTrinkets]);
+
+  useEffect(() => {
+    if (!gameResult) {
+      return;
+    }
+    if (hasHandledGameOverRef.current) {
+      return;
+    }
+    hasHandledGameOverRef.current = true;
+
+    const updatedTrinkets = cloneTrinketState(heldTrinkets);
+    setTrinketsRef.current(updatedTrinkets);
+
+    if (gameResult === "win") {
+      const timeout = setTimeout(() => {
+        router.replace("/(tabs)/map");
+      }, 1000);
+
+      return () => clearTimeout(timeout);
+    }
+
+    markRunEndedRef.current();
+    const timeout = setTimeout(() => {
+      router.replace("/");
+    }, 1000);
+
+    return () => clearTimeout(timeout);
+  }, [gameResult, heldTrinkets, router]);
 
   useEffect(() => {
     if (mustDrawCard) {
@@ -582,6 +745,10 @@ export default function Battle() {
   }, [mustDrawCard, drawButtonOpacity]);
 
   useEffect(() => {
+    scoreRef.current = score;
+  }, [score]);
+
+  useEffect(() => {
     if (!isRulebookVisible) {
       return;
     }
@@ -600,20 +767,6 @@ export default function Battle() {
 
     return () => clearTimeout(timeout);
   }, [isRulebookVisible, rulebookTargetKey]);
-
-  useEffect(() => {
-    if (score >= 10) {
-      setGameOver(true);
-      setGameResult("win");
-      setIsAnimating(false);
-      setMustDrawCard(false);
-    } else if (score <= 0) {
-      setGameOver(true);
-      setGameResult("lose");
-      setIsAnimating(false);
-      setMustDrawCard(false);
-    }
-  }, [score]);
 
   const checkSlots = (index: number) => {
     const card = hand[index];
@@ -797,22 +950,22 @@ export default function Battle() {
 
   const bounceSlot = (slotIndex: number, direction: "up" | "down" = "up") =>
     new Promise<void>((resolve) => {
-      const amplitude = 18;
+      const amplitude = 40;
       const toValue = direction === "up" ? -amplitude : amplitude;
       Animated.sequence([
         Animated.timing(slotY[slotIndex], {
           toValue,
-          duration: 120,
+          duration: 100,
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
         Animated.timing(slotY[slotIndex], {
           toValue: 0,
-          duration: 160,
+          duration: 200,
           easing: Easing.inOut(Easing.quad),
           useNativeDriver: true,
         }),
-      ]).start(() => resolve());
+      ]).start(() => setTimeout(resolve, 150)); // short delay before strike
     });
 
   const handlePlayRound = async () => {
@@ -820,6 +973,7 @@ export default function Battle() {
       selectedIndex !== null && sacrificeSlots.length > 0;
     const shouldSkipOpponentAttack = skipOpponentAttackPhase;
     const hasPlayerFan = fanActive;
+    let battleEnded = false;
     if (isAnimating) return;
     if (gameOver) return;
     if (mustDrawCard) return;
@@ -836,9 +990,23 @@ export default function Battle() {
         isPlayerAttack: boolean,
       ) => {
         for (let d = 0; d < amount; d += 1) {
-          setScore((s) => (isPlayerAttack ? s + 1 : s - 1));
+          setScore((currentScore) => {
+            const nextScore = isPlayerAttack
+              ? currentScore + 1
+              : currentScore - 1;
+            scoreRef.current = nextScore;
+            return nextScore;
+          });
           await delay(250);
         }
+      };
+
+      const concludeBattle = (result: "win" | "lose") => {
+        battleEnded = true;
+        hasHandledGameOverRef.current = false;
+        setGameOver(true);
+        setGameResult(result);
+        setMustDrawCard(false);
       };
 
       const getBehindSlot = (targetSlot: number) => {
@@ -895,19 +1063,20 @@ export default function Battle() {
           return;
         }
 
-        if (hasSigil(defender, "Loose Tail")) {
+        if (hasSigil(defender, "Tailwind")) {
           const moveToSlot = getLooseTailDestination(targetSlot);
           if (moveToSlot !== null) {
             const movedDefender: BattleCard = {
               ...defender,
               sigils: defender.sigils.filter(
-                (sigil) => sigil.name !== "Loose Tail",
+                (sigil) => sigil.name !== "Tailwind",
               ),
             };
             localSlots[moveToSlot] = movedDefender;
             localSlots[targetSlot] = cloneCard(tailCardTemplate);
             setSlotCards([...localSlots]);
-            await delay(60);
+            // Slightly longer pause so the Tail placement is visible on fast attacks
+            await delay(150);
           }
         }
 
@@ -1027,6 +1196,11 @@ export default function Battle() {
         await delay(30);
       }
 
+      if (scoreRef.current >= 10) {
+        concludeBattle("win");
+        return;
+      }
+
       // Phase 1.5: Sprinter movement on player row (8-11)
       localSlots = applySprinterMovement(localSlots, 8, 11);
       setSlotCards([...localSlots]);
@@ -1082,6 +1256,11 @@ export default function Battle() {
         await delay(250);
       }
 
+      if (scoreRef.current <= 0) {
+        concludeBattle("lose");
+        return;
+      }
+
       // Phase 3.25: Sprinter movement on opponent row (4-7)
       localSlots = applySprinterMovement(localSlots, 4, 7);
       setSlotCards([...localSlots]);
@@ -1101,13 +1280,29 @@ export default function Battle() {
 
       // Phase 4: Spawn enemy cards on top row (0-3) based on level type + difficulty
       const emptyOpponentSlots = [0, 1, 2, 3].filter((idx) => !localSlots[idx]);
-      if (enemySpawnPool.length > 0 && emptyOpponentSlots.length > 0) {
-        const spawnCap =
-          levelType === "one bear"
-            ? 1
-            : Math.max(1, Math.min(3, levelDifficulty));
-        const cardsToSpawn = Math.min(spawnCap, emptyOpponentSlots.length);
+      const canScheduleSpawnRound =
+        spawnRoundsCompletedRef.current < spawnRoundsCapRef.current;
+      const scheduledSpawnCount = canScheduleSpawnRound
+        ? getSpawnCountForDifficulty(levelDifficulty, battleRoundRef.current)
+        : 0;
+      const adjustedSpawnCount =
+        levelType === "one bear"
+          ? oneBearHasSpawnedRef.current
+            ? 0
+            : Math.min(1, scheduledSpawnCount)
+          : scheduledSpawnCount;
 
+      if (adjustedSpawnCount > 0) {
+        spawnRoundsCompletedRef.current += 1;
+      }
+
+      if (enemySpawnPool.length > 0 && emptyOpponentSlots.length > 0) {
+        const cardsToSpawn = Math.min(
+          adjustedSpawnCount,
+          emptyOpponentSlots.length,
+        );
+
+        let spawnedAnyCard = false;
         for (let i = 0; i < cardsToSpawn; i += 1) {
           if (emptyOpponentSlots.length === 0) {
             break;
@@ -1120,10 +1315,17 @@ export default function Battle() {
           const enemyIndex = Math.floor(Math.random() * enemySpawnPool.length);
           const enemyTemplate = enemySpawnPool[enemyIndex];
           localSlots[selectedSlot] = cloneCard(enemyTemplate);
+          spawnedAnyCard = true;
           setSlotCards([...localSlots]);
           await delay(80);
         }
+
+        if (levelType === "one bear" && spawnedAnyCard) {
+          oneBearHasSpawnedRef.current = true;
+        }
       }
+
+      battleRoundRef.current += 1;
     } finally {
       await delay(120);
       if (shouldSkipOpponentAttack) {
@@ -1133,7 +1335,7 @@ export default function Battle() {
         setFanActive(false);
       }
       setIsAnimating(false);
-      setMustDrawCard(true);
+      setMustDrawCard(!battleEnded);
     }
   };
 
@@ -1374,9 +1576,7 @@ export default function Battle() {
                     onPress={() => handleUseTrinket(slotId)}
                   >
                     {trinket ? (
-                      <>
-                        {renderTrinketIcon(trinket)}
-                      </>
+                      <>{renderTrinketIcon(trinket)}</>
                     ) : (
                       <MaterialCommunityIcons
                         name="checkbox-blank-outline"

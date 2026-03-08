@@ -1,14 +1,25 @@
+import { useGameRun } from "@/app/game-state";
+import { CardView } from "@/components/card-view";
 import { ThemedText } from "@/components/themed-text";
 import { Fonts } from "@/constants/theme";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { Animated, Easing, Pressable, StyleSheet, View } from "react-native";
+import {
+  Animated,
+  Easing,
+  Modal,
+  PanResponder,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import Svg, { Line } from "react-native-svg";
 
 export type Node = {
   id: string;
-  icon?: React.ComponentProps<typeof MaterialCommunityIcons>["name"];
+  icon?: string;
 };
 
 export type Break = {
@@ -55,60 +66,107 @@ export type MapState = {
   breaks: Break[];
 };
 
-export const sampleMapState: MapState = {
-  currentDepth: 2,
-  selectedNodeId: "tier2-b",
-  breaks: [
-    {
-      depth: 1,
+const randomInt = (min: number, max: number) =>
+  Math.floor(Math.random() * (max - min + 1)) + min;
+
+const pickRandom = <T,>(items: T[]) =>
+  items[randomInt(0, Math.max(items.length - 1, 0))];
+
+const shuffle = <T,>(items: T[]) => {
+  const cloned = [...items];
+  for (let index = cloned.length - 1; index > 0; index -= 1) {
+    const swapIndex = randomInt(0, index);
+    [cloned[index], cloned[swapIndex]] = [cloned[swapIndex], cloned[index]];
+  }
+  return cloned;
+};
+
+const getRandomBreakNodes = (count: number) => {
+  const breakNodePool = nodeList.filter(
+    (node) => node.id !== "start" && node.id !== "battle",
+  );
+  if (count <= breakNodePool.length) {
+    return shuffle(breakNodePool).slice(0, count);
+  }
+  return Array.from({ length: count }, () => pickRandom(breakNodePool));
+};
+
+const getRandomConnectionType = (fromCount: number, toCount: number) => {
+  const compatible = connectionTypes.filter((type) =>
+    Boolean(connectionResolvers[type]?.(fromCount, toCount)),
+  );
+
+  if (compatible.length === 0) {
+    if (fromCount === 1) return "1-x";
+    if (toCount === 1) return "x-1";
+    return "33straight";
+  }
+
+  return pickRandom(compatible);
+};
+
+export const generateRandomMapState = (): MapState => {
+  const breaks: Break[] = [];
+  let depth = 1;
+  const startNode = nodeList.find((node) => node.id === "start") ?? nodeList[0];
+  const newCardNode =
+    nodeList.find((node) => node.id === "newcard") ?? nodeList[1];
+  const battleNode =
+    nodeList.find((node) => node.id === "battle") ?? nodeList[5];
+
+  breaks.push({
+    depth,
+    numOfNodes: 1,
+    connectiontype: [],
+    isBattle: false,
+    nodes: [startNode],
+  });
+  depth += 1;
+
+  for (let battleNumber = 1; battleNumber <= 5; battleNumber += 1) {
+    for (let breakNumber = 0; breakNumber < 2; breakNumber += 1) {
+      const isFirstPlayableBreak = battleNumber === 1 && breakNumber === 0;
+      const numOfNodes = isFirstPlayableBreak ? 1 : randomInt(2, 3);
+      breaks.push({
+        depth,
+        numOfNodes,
+        connectiontype: [],
+        isBattle: false,
+        nodes: isFirstPlayableBreak
+          ? [newCardNode]
+          : getRandomBreakNodes(numOfNodes),
+      });
+      depth += 1;
+    }
+
+    breaks.push({
+      depth,
       numOfNodes: 1,
-      connectiontype: ["1-x"],
-      isBattle: false,
-      nodes: [nodeList[0]],
-    },
-    {
-      depth: 2,
-      numOfNodes: 1,
-      connectiontype: ["1-x"],
-      isBattle: false,
-      nodes: [nodeList[1]],
-    },
-    {
-      depth: 3,
-      numOfNodes: 3,
-      connectiontype: ["x-1"],
-      isBattle: false,
-      nodes: [nodeList[2], nodeList[3], nodeList[4]],
-    },
-    {
-      depth: 4,
-      numOfNodes: 1,
-      connectiontype: ["1-x"],
+      connectiontype: [],
       isBattle: true,
-      nodes: [nodeList[5]],
-    },
-    {
-      depth: 5,
-      numOfNodes: 3,
-      connectiontype: ["32convergeright"],
-      isBattle: false,
-      nodes: [nodeList[1], nodeList[3], nodeList[2]],
-    },
-    {
-      depth: 6,
-      numOfNodes: 2,
-      connectiontype: ["23divergeleft"],
-      isBattle: false,
-      nodes: [nodeList[3], nodeList[4]],
-    },
-    {
-      depth: 7,
-      numOfNodes: 1,
-      connectiontype: ["x-1"],
-      isBattle: true,
-      nodes: [nodeList[5]],
-    },
-  ],
+      nodes: [battleNode],
+    });
+    depth += 1;
+  }
+
+  for (let index = 0; index < breaks.length - 1; index += 1) {
+    const currentBreak = breaks[index];
+    const nextBreak = breaks[index + 1];
+    currentBreak.connectiontype = [
+      getRandomConnectionType(currentBreak.numOfNodes, nextBreak.numOfNodes),
+    ];
+  }
+
+  const firstBreak = breaks[0];
+  const firstNode = firstBreak?.nodes[0];
+
+  return {
+    currentDepth: firstBreak?.depth ?? 0,
+    selectedNodeId: firstNode
+      ? makeNodeInstanceId(firstBreak.depth, 0, firstNode)
+      : undefined,
+    breaks,
+  };
 };
 
 export type PlayerPosition = {
@@ -126,6 +184,7 @@ type NodeLayout = {
 };
 
 const PLAYER_ICON_SIZE = 48;
+const ROUTE_AFTER_MOVE_DELAY_MS = 400;
 
 const range = (count: number) => Array.from({ length: count }, (_, idx) => idx);
 const clampTargets = (targets: number[], toCount: number) =>
@@ -181,11 +240,33 @@ const resolveConnectionMatrix = (
   return matrix.map((targets) => clampTargets(targets, toCount));
 };
 
+export const sampleMapState: MapState = generateRandomMapState();
+
 export default function MapScreen() {
   const router = useRouter();
-  const orderedBreaks = useMemo(
-    () => [...sampleMapState.breaks].sort((a, b) => a.depth - b.depth),
+  const {
+    gameRun: { deck, map },
+    setMapState,
+  } = useGameRun();
+  const [deckModalVisible, setDeckModalVisible] = useState(false);
+  const swipeToDeckResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gestureState) => {
+          const { dx, dy } = gestureState;
+          return Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx);
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          if (gestureState.dy < -60) {
+            setDeckModalVisible(true);
+          }
+        },
+      }),
     [],
+  );
+  const orderedBreaks = useMemo(
+    () => [...map.breaks].sort((a, b) => a.depth - b.depth),
+    [map.breaks],
   );
   const firstOccupiedBreak = useMemo(
     () => orderedBreaks.find((br) => br.nodes.length > 0),
@@ -197,14 +278,21 @@ export default function MapScreen() {
     ? makeNodeInstanceId(firstOccupiedBreak.depth, 0, initialNode)
     : undefined;
 
-  const [selectedNodeId, setSelectedNodeId] = useState(
-    () => sampleMapState.selectedNodeId ?? initialNodeInstanceId,
+  const selectedNodeId = map.selectedNodeId ?? initialNodeInstanceId;
+  const playerPosition = useMemo(
+    () =>
+      map.playerPosition ?? {
+        depth: firstOccupiedBreak?.depth ?? orderedBreaks[0]?.depth ?? 0,
+        nodeIndex: 0,
+        nodeInstanceId: initialNodeInstanceId,
+      },
+    [
+      map.playerPosition,
+      firstOccupiedBreak?.depth,
+      orderedBreaks,
+      initialNodeInstanceId,
+    ],
   );
-  const [playerPosition, setPlayerPosition] = useState<PlayerPosition>(() => ({
-    depth: firstOccupiedBreak?.depth ?? orderedBreaks[0]?.depth ?? 0,
-    nodeIndex: 0,
-    nodeInstanceId: initialNodeInstanceId,
-  }));
 
   const depthToIndex = useMemo(() => {
     const indexMap: Record<number, number> = {};
@@ -255,10 +343,14 @@ export default function MapScreen() {
   ]);
 
   React.useEffect(() => {
-    if (playerPosition.nodeInstanceId) {
-      setSelectedNodeId(playerPosition.nodeInstanceId);
-    }
-  }, [playerPosition.nodeInstanceId]);
+    if (map.playerPosition) return;
+    setMapState((current) => ({
+      ...current,
+      currentDepth: playerPosition.depth,
+      selectedNodeId: playerPosition.nodeInstanceId,
+      playerPosition,
+    }));
+  }, [map.playerPosition, playerPosition, setMapState]);
 
   const [rowLayouts, setRowLayouts] = useState<
     Record<number, { x: number; y: number; width: number; height: number }>
@@ -268,7 +360,10 @@ export default function MapScreen() {
   );
   const playerXY = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const playerPlaced = useRef(false);
+  const mapScrollRef = useRef<ScrollView>(null);
   const [playerVisible, setPlayerVisible] = useState(false);
+  const [mapViewportHeight, setMapViewportHeight] = useState(0);
+  const [mapContentHeight, setMapContentHeight] = useState(0);
 
   const computeTarget = useCallback(
     (nodeInstanceId?: string) => {
@@ -317,9 +412,34 @@ export default function MapScreen() {
     [computeTarget, playerXY],
   );
 
+  const scrollToPlayer = useCallback(
+    (nodeInstanceId?: string, animated = true) => {
+      if (!nodeInstanceId || mapViewportHeight <= 0 || mapContentHeight <= 0) {
+        return;
+      }
+
+      const target = computeTarget(nodeInstanceId);
+      if (!target) return;
+
+      const playerCenterY = target.y + PLAYER_ICON_SIZE / 2;
+      const maxScrollY = Math.max(mapContentHeight - mapViewportHeight, 0);
+      const desiredScrollY = Math.max(
+        0,
+        Math.min(playerCenterY - mapViewportHeight / 2, maxScrollY),
+      );
+
+      mapScrollRef.current?.scrollTo({ x: 0, y: desiredScrollY, animated });
+    },
+    [computeTarget, mapContentHeight, mapViewportHeight],
+  );
+
   React.useEffect(() => {
     animateToNode(playerPosition.nodeInstanceId);
   }, [playerPosition.nodeInstanceId, animateToNode]);
+
+  React.useEffect(() => {
+    scrollToPlayer(playerPosition.nodeInstanceId, playerPlaced.current);
+  }, [playerPosition.nodeInstanceId, scrollToPlayer, nodeLayouts, rowLayouts]);
 
   const allConnections = useMemo(() => {
     const edges: { from: string; to: string }[] = [];
@@ -374,131 +494,192 @@ export default function MapScreen() {
 
   return (
     <View style={styles.container}>
-      <ThemedText type="title" style={{ fontFamily: Fonts.rounded }}>
-        Map Screen
-      </ThemedText>
+      <Pressable onPress={() => router.push("/")}>
+        <ThemedText type="title" style={{ fontFamily: Fonts.rounded }}>
+          Map Screen
+        </ThemedText>
+      </Pressable>
 
-      <View
-        style={styles.mapCanvas}
+      <ScrollView
+        ref={mapScrollRef}
+        style={styles.mapScroller}
+        contentContainerStyle={styles.mapScrollerContent}
+        scrollEnabled={false}
+        showsVerticalScrollIndicator={false}
+        {...swipeToDeckResponder.panHandlers}
         onLayout={(event) => {
-          const { width, height } = event.nativeEvent.layout;
-          setMapCanvasLayout({ width, height });
+          setMapViewportHeight(event.nativeEvent.layout.height);
+        }}
+        onContentSizeChange={(_, height) => {
+          setMapContentHeight(height);
         }}
       >
-        <Svg
-          width={mapCanvasLayout.width}
-          height={mapCanvasLayout.height}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
+        <View
+          style={styles.mapCanvas}
+          onLayout={(event) => {
+            const { width, height } = event.nativeEvent.layout;
+            setMapCanvasLayout({ width, height });
+          }}
         >
-          {connectionLines}
-        </Svg>
-
-        {[...orderedBreaks].reverse().map((row) => (
-          <View
-            key={row.depth}
-            style={styles.tierRow}
-            onLayout={(event) => {
-              const layout = event.nativeEvent.layout;
-              setRowLayouts((prev) => {
-                const existing = prev[row.depth];
-                if (
-                  existing &&
-                  existing.x === layout.x &&
-                  existing.y === layout.y &&
-                  existing.width === layout.width &&
-                  existing.height === layout.height
-                ) {
-                  return prev;
-                }
-                return { ...prev, [row.depth]: layout };
-              });
-            }}
-          >
-            {Array.from({ length: row.numOfNodes }).map((_, idx) => {
-              const node = row.nodes[idx];
-              const nodeInstanceId = makeNodeInstanceId(row.depth, idx, node);
-              const isPlayerNode =
-                row.depth === playerPosition.depth &&
-                idx === playerPosition.nodeIndex;
-              const isNextReachable =
-                row.depth === nextBreakDepth &&
-                allowedNextIndices.includes(idx);
-              const canSelect =
-                Boolean(node) && (isPlayerNode || isNextReachable);
-
-              return (
-                <Pressable
-                  key={nodeInstanceId}
-                  style={[
-                    styles.node,
-                    row.isBattle && styles.battleNode,
-                    nodeInstanceId === selectedNodeId && styles.selectedNode,
-                    isNextReachable && styles.reachableNode,
-                    !canSelect && styles.disabledNode,
-                  ]}
-                  disabled={!canSelect}
-                  onPress={() => {
-                    if (!node || !canSelect || isPlayerNode) return;
-                    setPlayerPosition({
-                      depth: row.depth,
-                      nodeIndex: idx,
-                      nodeInstanceId,
-                    });
-                    if (row.isBattle) {
-                      router.push("/(tabs)/battle");
-                    }
-                  }}
-                  onLayout={(event) => {
-                    if (!node) return;
-                    const layout = event.nativeEvent.layout;
-                    setNodeLayouts((prev) => {
-                      const existing = prev[nodeInstanceId];
-                      if (
-                        existing &&
-                        existing.layout.x === layout.x &&
-                        existing.layout.y === layout.y &&
-                        existing.layout.width === layout.width &&
-                        existing.layout.height === layout.height
-                      ) {
-                        return prev;
-                      }
-                      return {
-                        ...prev,
-                        [nodeInstanceId]: { depth: row.depth, layout },
-                      };
-                    });
-                  }}
-                >
-                  <MaterialCommunityIcons
-                    name={node?.icon ?? "circle-slice-8"}
-                    size={36}
-                    color={isNextReachable ? "#ffffff" : "#000000"}
-                  />
-                </Pressable>
-              );
-            })}
-          </View>
-        ))}
-        {playerVisible && (
-          <Animated.View
+          <Svg
+            width={mapCanvasLayout.width}
+            height={mapCanvasLayout.height}
+            style={StyleSheet.absoluteFill}
             pointerEvents="none"
-            style={[
-              styles.playerIcon,
-              { transform: playerXY.getTranslateTransform() },
-            ]}
           >
-            <MaterialCommunityIcons name="hiking" size={28} color="#0f172a" />
-          </Animated.View>
-        )}
-      </View>
+            {connectionLines}
+          </Svg>
+
+          {[...orderedBreaks].reverse().map((row) => (
+            <View
+              key={row.depth}
+              style={styles.tierRow}
+              onLayout={(event) => {
+                const layout = event.nativeEvent.layout;
+                setRowLayouts((prev) => {
+                  const existing = prev[row.depth];
+                  if (
+                    existing &&
+                    existing.x === layout.x &&
+                    existing.y === layout.y &&
+                    existing.width === layout.width &&
+                    existing.height === layout.height
+                  ) {
+                    return prev;
+                  }
+                  return { ...prev, [row.depth]: layout };
+                });
+              }}
+            >
+              {Array.from({ length: row.numOfNodes }).map((_, idx) => {
+                const node = row.nodes[idx];
+                const nodeInstanceId = makeNodeInstanceId(row.depth, idx, node);
+                const isPlayerNode =
+                  row.depth === playerPosition.depth &&
+                  idx === playerPosition.nodeIndex;
+                const isNextReachable =
+                  row.depth === nextBreakDepth &&
+                  allowedNextIndices.includes(idx);
+                const canSelect =
+                  Boolean(node) && (isPlayerNode || isNextReachable);
+
+                return (
+                  <Pressable
+                    key={nodeInstanceId}
+                    style={[
+                      styles.node,
+                      row.isBattle && styles.battleNode,
+                      nodeInstanceId === selectedNodeId && styles.selectedNode,
+                      isNextReachable && styles.reachableNode,
+                      !canSelect && styles.disabledNode,
+                    ]}
+                    disabled={!canSelect}
+                    onPress={() => {
+                      if (!node || !canSelect || isPlayerNode) return;
+                      setMapState((current) => ({
+                        ...current,
+                        currentDepth: row.depth,
+                        selectedNodeId: nodeInstanceId,
+                        playerPosition: {
+                          depth: row.depth,
+                          nodeIndex: idx,
+                          nodeInstanceId,
+                        },
+                      }));
+                      if (row.isBattle) {
+                        setTimeout(() => {
+                          router.push("/(tabs)/battle");
+                        }, ROUTE_AFTER_MOVE_DELAY_MS);
+                      } else if (node.id === "campfire") {
+                        setTimeout(() => {
+                          router.push("/(tabs)/campfire");
+                        }, ROUTE_AFTER_MOVE_DELAY_MS);
+                      } else if (node.id === "newcard") {
+                        router.push("/(tabs)/newcard");
+                      }
+                    }}
+                    onLayout={(event) => {
+                      if (!node) return;
+                      const layout = event.nativeEvent.layout;
+                      setNodeLayouts((prev) => {
+                        const existing = prev[nodeInstanceId];
+                        if (
+                          existing &&
+                          existing.layout.x === layout.x &&
+                          existing.layout.y === layout.y &&
+                          existing.layout.width === layout.width &&
+                          existing.layout.height === layout.height
+                        ) {
+                          return prev;
+                        }
+                        return {
+                          ...prev,
+                          [nodeInstanceId]: { depth: row.depth, layout },
+                        };
+                      });
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name={
+                        (node?.icon as keyof typeof MaterialCommunityIcons.glyphMap) ??
+                        "circle-slice-8"
+                      }
+                      size={36}
+                      color={isNextReachable ? "#ffffff" : "#000000"}
+                    />
+                  </Pressable>
+                );
+              })}
+            </View>
+          ))}
+          {playerVisible && (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.playerIcon,
+                { transform: playerXY.getTranslateTransform() },
+              ]}
+            >
+              <MaterialCommunityIcons name="hiking" size={28} color="#0f172a" />
+            </Animated.View>
+          )}
+        </View>
+      </ScrollView>
+      {/* Deck Modal */}
+      <Modal
+        visible={deckModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeckModalVisible(false)}
+      >
+        <View style={styles.modalRoot}>
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => setDeckModalVisible(false)}
+          />
+          <View style={styles.modalCard}>
+            <ScrollView
+              contentContainerStyle={styles.deckGrid}
+              showsVerticalScrollIndicator={false}
+            >
+              {deck.map((card, idx) => (
+                <View key={`${card.name}-${idx}`} style={styles.deckItem}>
+                  <CardView card={card} width={110} />
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 24, backgroundColor: "#02030a" },
-  mapCanvas: { marginTop: 24, gap: 32, position: "relative" },
+  mapScroller: { marginTop: 24, flex: 1 },
+  mapScrollerContent: { flexGrow: 1 },
+  mapCanvas: { gap: 32, position: "relative", paddingBottom: 24 },
   tierRow: {
     flexDirection: "row",
     justifyContent: "space-evenly",
@@ -528,6 +709,45 @@ const styles = StyleSheet.create({
     borderColor: "#f59e0b",
     alignItems: "center",
     justifyContent: "center",
+  },
+  modalRoot: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+  modalCard: {
+    width: "88%",
+    maxHeight: "75%",
+    backgroundColor: "#0b1222",
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#f59e0b",
+    padding: 12,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  modalTitle: {
+    color: "#ffffff",
+  },
+  closeButton: {
+    padding: 6,
+  },
+  deckGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    justifyContent: "space-between",
+  },
+  deckItem: {
+    marginBottom: 10,
   },
 });
 

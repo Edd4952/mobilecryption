@@ -1,10 +1,12 @@
-import { Link, router } from "expo-router";
+import { router } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { useGameRun } from "./game-state";
 import { colorsFor, useThemeMode } from "./theme";
 
 const HomePage = () => {
   const { mode } = useThemeMode();
+  const { createNewGame, gameRun } = useGameRun();
   const c = colorsFor(mode);
 
   return (
@@ -19,15 +21,25 @@ const HomePage = () => {
       </Text>
 
       <View style={styles.actions}>
-        <Link
-          style={[styles.button]}
-          href={{ pathname: "/(tabs)/map", params: { mode: "create" } }}
+        <Pressable
+          style={[styles.button, !gameRun.canContinue && styles.buttonDisabled]}
+          disabled={!gameRun.canContinue}
+          onPress={() => {
+            if (!gameRun.canContinue) return;
+            router.push("/(tabs)/map");
+          }}
         >
           <Text style={[styles.text, { color: c.text }]}>Continue</Text>
-        </Link>
-        {/* Continue game */}
-        
-        
+        </Pressable>
+        <Pressable
+          style={[styles.button2]}
+          onPress={() => {
+            createNewGame();
+            router.push("/(tabs)/map");
+          }}
+        >
+          <Text style={[styles.text, { color: c.text }]}>New Game</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -61,6 +73,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 8,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
   },
   actions: {
     alignItems: "center",

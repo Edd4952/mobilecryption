@@ -44,6 +44,20 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="newcard"
+        options={{
+          href: null,
+          title: "New Card",
+        }}
+      />
+      <Tabs.Screen
+        name="campfire"
+        options={{
+          href: null,
+          title: "Campfire",
+        }}
+      />
     </Tabs>
   );
 }
