@@ -1,29 +1,29 @@
 import { CardView } from "@/components/card-view";
 import { ThemedText } from "@/components/themed-text";
 import {
-  FontAwesome,
-  FontAwesome6,
-  MaterialCommunityIcons,
+    FontAwesome,
+    FontAwesome6,
+    MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import Octicons from "@expo/vector-icons/Octicons";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
 } from "react";
 import {
-  Animated,
-  Easing,
-  LayoutChangeEvent,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
+    Animated,
+    Easing,
+    LayoutChangeEvent,
+    Modal,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    View,
 } from "react-native";
 import { Card, cards, miscCards, sigils, sigilsByName } from "../cards";
 import { useGameRun } from "../game-state";
@@ -1538,7 +1538,7 @@ export default function Battle() {
               <Pressable
                 style={{
                   padding: 12,
-                  backgroundColor: "#ff8a5c",
+                  backgroundColor: "#b28920",
                   borderRadius: 4,
                   height: 92,
                   width: 69,

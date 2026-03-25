@@ -94,7 +94,7 @@ const CostBack = ({
     <View style={[styles.cardBack, { width, height }]}>
       <View style={styles.cardBackContent}>
         {bucket === "bone" ? (
-          <MaterialCommunityIcons name="bone" size={36} color="#f5e6c8" />
+          <MaterialCommunityIcons name="bone" size={36} color="#000000" />
         ) : (
           <View style={styles.costIconsRow}>
             {Array.from({ length: bloodCount }, (_, index) => (
@@ -102,7 +102,7 @@ const CostBack = ({
                 key={`${bucket}-${index}`}
                 name="water"
                 size={30}
-                color="#dc2626"
+                color="#7f1d1d"
               />
             ))}
           </View>
@@ -288,19 +288,13 @@ const styles = StyleSheet.create({
   cardBack: {
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: "#8b6b2a",
-    backgroundColor: "#1b1309",
+    backgroundColor: "#b28920",
     alignItems: "center",
     justifyContent: "center",
-    padding: 12,
   },
   cardBackContent: {
     flex: 1,
     width: "100%",
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "rgba(251, 191, 36, 0.4)",
-    backgroundColor: "rgba(251, 191, 36, 0.08)",
     alignItems: "center",
     justifyContent: "center",
   },

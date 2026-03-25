@@ -197,13 +197,13 @@ const styles = StyleSheet.create({
   cardBack: {
     borderRadius: 8,
     borderWidth: 2,
-    backgroundColor: "#fbbf24",
+    backgroundColor: "#b28920",
     alignItems: "center",
     justifyContent: "center",
   },
   cardBackText: {
     fontSize: 40,
-    color: "#fbbf24",
+    color: "#b28920",
     fontWeight: "bold",
   },
 });
