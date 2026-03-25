@@ -18,7 +18,7 @@ const CARD_BACK_COUNT = 3;
 const CARD_BASE_WIDTH = 75;
 const CARD_BASE_HEIGHT = 100;
 const CARD_ROUTE_DELAY_MS = 1500;
-const CARD_FALL_DURATION_MS = 250;
+const CARD_FALL_DURATION_MS = 500;
 
 const shuffle = <T,>(items: T[]) => {
   const cloned = [...items];

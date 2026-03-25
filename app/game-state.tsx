@@ -24,6 +24,7 @@ type GameRunContextValue = {
   createNewGame: () => void;
   markRunEnded: () => void;
   setMapState: React.Dispatch<React.SetStateAction<MapState>>;
+  setDeck: React.Dispatch<React.SetStateAction<Card[]>>;
   setTrinkets: React.Dispatch<React.SetStateAction<(Trinket | null)[]>>;
   appendCardToDeck: (card: Card) => void;
   replaceDeckCardAt: (index: number, card: Card) => void;
@@ -119,6 +120,13 @@ export const GameRunProvider = ({
     }));
   };
 
+  const setDeck: React.Dispatch<React.SetStateAction<Card[]>> = (updater) => {
+    setGameRun((current) => ({
+      ...current,
+      deck: typeof updater === "function" ? updater(current.deck) : updater,
+    }));
+  };
+
   const setTrinkets: React.Dispatch<
     React.SetStateAction<(Trinket | null)[]>
   > = (updater) => {
@@ -161,6 +169,7 @@ export const GameRunProvider = ({
       createNewGame,
       markRunEnded,
       setMapState,
+      setDeck,
       setTrinkets,
       appendCardToDeck,
       replaceDeckCardAt,
