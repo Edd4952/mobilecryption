@@ -5,22 +5,22 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import React, {
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from "react";
 import {
-	Pressable,
-	ScrollView,
-	StyleSheet,
-	Text,
-	View,
-	useWindowDimensions,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
 } from "react-native";
 
-const ROUTE_DELAY_MS = 700;
+const ROUTE_DELAY_MS = 1000;
 
 export default function CampfireScreen() {
   const router = useRouter();
@@ -39,6 +39,13 @@ export default function CampfireScreen() {
   );
   const routeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { width: screenWidth } = useWindowDimensions();
+
+  const resetCampfireState = useCallback(() => {
+    setCampfireCard(null);
+    setSelectedDeckIndex(null);
+    setSlottedDeckIndex(null);
+    setAppliedBuff(null);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -77,17 +84,14 @@ export default function CampfireScreen() {
           style={styles.backdrop}
           onPress={() => {
             if (isResolvingCampfire) return;
-            setCampfireCard(null);
-            setSelectedDeckIndex(null);
-            setSlottedDeckIndex(null);
-            setAppliedBuff(null);
+            resetCampfireState();
           }}
           accessibilityRole="button"
           accessibilityLabel="Remove card from campfire"
         />
       ) : null}
 
-      <View style={styles.campfireRow}>
+      <View style={styles.campfireRow} pointerEvents="box-none">
         <Pressable
           style={styles.campfireSlot}
           onPress={() => {
@@ -137,6 +141,7 @@ export default function CampfireScreen() {
             setAppliedBuff(campfireBuff);
             setIsResolvingCampfire(true);
             routeTimeoutRef.current = setTimeout(() => {
+              resetCampfireState();
               router.replace("/(tabs)/map");
             }, ROUTE_DELAY_MS);
           }}

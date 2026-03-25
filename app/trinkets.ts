@@ -8,35 +8,35 @@ export type Trinket = {
 export const trinkets: Trinket[] = [
   {
     name: "Bottle Squirrel",
-    description: "Add a Squirrel to your hand. One-time use.",
+    description: "Add a Squirrel to your hand.",
     icon: "squirrel",
     iconLibrary: "Octicons",
 
   },
   {
     name: "Pliers",
-    description: "Deal 1 direct damage to the opponent scale. One-time use.",
+    description: "Deal 1 direct damage to the opponent scale. ",
     icon: "pliers",
   },
   {
     name: "Scissors",
-    description: "Cut an enemy card in front of your lane. One-time use.",
+    description: "Cut an enemy card in front of your lane. ",
     icon: "content-cut",
   },
   {
     name: "Hoggy Bank",
-    description: "Gain 4 bones instantly. One-time use.",
+    description: "Gain 4 bones instantly. ",
     icon: "piggy-bank",
   },
   {
     name: "Hourglass",
-    description: "Skip the opponent attack phase this turn. One-time use.",
+    description: "Skip the opponent attack phase for one turn. ",
     icon: "hourglass-half",
     iconLibrary: "FontAwesome6",
   },
   {
     name: "Fan",
-    description: "Your cards gain Flying for this turn. One-time use.",
+    description: "Your cards gain Flying for one turn. ",
     icon: "fan",
     iconLibrary: "FontAwesome6",
   },

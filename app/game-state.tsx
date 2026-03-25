@@ -1,41 +1,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, {
-    createContext,
-    useContext,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from "react";
 
 import { cards, type Card } from "./cards";
+import { generateRandomMapState, type MapState } from "./map-generation";
 import { trinkets, type Trinket } from "./trinkets";
-
-export type Node = {
-  id: string;
-  icon?: string;
-};
-
-export type Break = {
-  depth: number;
-  numOfNodes: number;
-  connectiontype: string[];
-  isBattle: boolean;
-  nodes: Node[];
-};
-
-export type PlayerPosition = {
-  depth: number;
-  nodeIndex: number;
-  nodeInstanceId?: string;
-};
-
-export type MapState = {
-  currentDepth: number;
-  selectedNodeId?: string;
-  playerPosition: PlayerPosition;
-  breaks: Break[];
-};
 
 type GameRunState = {
   map: MapState;
@@ -56,113 +31,9 @@ type GameRunContextValue = {
 
 const GAME_RUN_STORAGE_KEY = "@mobilecryption_game_run_v1";
 
-const NON_BATTLE_NODES: Node[] = [
-  { id: "newcard", icon: "cards-playing-outline" },
-  { id: "campfire", icon: "fire" },
-  { id: "gift", icon: "bag-personal" },
-  { id: "sacrifice", icon: "table-furniture" },
-];
-
-const START_NODE: Node = { id: "start", icon: "circle-slice-8" };
-const BATTLE_NODE: Node = { id: "battle", icon: "skull" };
-
-const makeNodeInstanceId = (depth: number, nodeIndex: number, node?: Node) =>
-  `${depth}-${nodeIndex}-${node?.id ?? "empty"}`;
-
-const sample = <T,>(items: T[]) =>
-  items[Math.floor(Math.random() * items.length)] ?? items[0];
-
-const pickConnectionType = (fromCount: number, toCount: number): string => {
-  if (fromCount === 1 && toCount >= 1) return "1-x";
-  if (toCount === 1 && fromCount >= 1) return "x-1";
-
-  if (fromCount === 2 && toCount === 2) {
-    return sample(["22straight", "22divergeleft", "22divergeright"]);
-  }
-  if (fromCount === 3 && toCount === 2) {
-    return sample(["32convergeleft", "32convergeright"]);
-  }
-  if (fromCount === 2 && toCount === 3) {
-    return sample(["23divergeleft", "23divergeright"]);
-  }
-  if (fromCount === 3 && toCount === 3) {
-    return sample(["33straight", "33divergeleft", "33divergeright"]);
-  }
-
-  return "1-x";
-};
-
-const generateMap = (): MapState => {
-  const totalDepth = 15;
-
-  const depthRows: {
-    depth: number;
-    numOfNodes: number;
-    isBattle: boolean;
-    nodes: Node[];
-  }[] = [];
-
-  for (let depth = 1; depth <= totalDepth; depth += 1) {
-    if (depth === 1) {
-      depthRows.push({
-        depth,
-        numOfNodes: 1,
-        isBattle: false,
-        nodes: [{ ...START_NODE }],
-      });
-      continue;
-    }
-
-    const isBattle = depth % 3 === 0;
-    const numOfNodes = isBattle ? 1 : sample([2, 2, 3]);
-    const nodes = Array.from({ length: numOfNodes }, () => {
-      if (isBattle) {
-        return { ...BATTLE_NODE };
-      }
-      return { ...sample(NON_BATTLE_NODES) };
-    });
-
-    depthRows.push({
-      depth,
-      numOfNodes,
-      isBattle,
-      nodes,
-    });
-  }
-
-  const breaks: Break[] = depthRows.map((row, idx) => {
-    const next = depthRows[idx + 1];
-    const connection = next
-      ? pickConnectionType(row.numOfNodes, next.numOfNodes)
-      : "1-x";
-
-    return {
-      depth: row.depth,
-      numOfNodes: row.numOfNodes,
-      connectiontype: [connection],
-      isBattle: row.isBattle,
-      nodes: row.nodes,
-    };
-  });
-
-  const firstNode = breaks[0]?.nodes[0];
-  const firstNodeInstanceId = makeNodeInstanceId(1, 0, firstNode);
-
-  return {
-    currentDepth: 1,
-    selectedNodeId: firstNodeInstanceId,
-    playerPosition: {
-      depth: 1,
-      nodeIndex: 0,
-      nodeInstanceId: firstNodeInstanceId,
-    },
-    breaks,
-  };
-};
-
 const createInitialRunState = (): GameRunState => ({
-  map: generateMap(),
-  deck: cards.slice(1, 4).map((card) => ({ ...card })),
+  map: generateRandomMapState(),
+  deck: cards.slice(0, 3).map((card) => ({ ...card })),
   trinkets: [trinkets[0], trinkets[1], null].map((item) =>
     item ? { ...item } : null,
   ),

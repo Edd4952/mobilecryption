@@ -2,7 +2,7 @@ import { useGameRun } from "@/app/game-state";
 import { CardView } from "@/components/card-view";
 import { ThemedText } from "@/components/themed-text";
 import { Fonts } from "@/constants/theme";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { MaterialCommunityIcons, MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
@@ -16,167 +16,13 @@ import {
   View,
 } from "react-native";
 import Svg, { Line } from "react-native-svg";
-
-export type Node = {
-  id: string;
-  icon?: string;
-};
-
-export type Break = {
-  depth: number; // vertical “row” or depth
-  numOfNodes: number; // 2 or 3
-  connectiontype: string[];
-  isBattle: boolean;
-  nodes: Node[]; // nodes at this break
-};
-
-export const nodeList: Node[] = [
-  { id: "start", icon: "circle-slice-8" },
-  { id: "newcard", icon: "cards-playing-outline" },
-  { id: "campfire", icon: "fire" },
-  { id: "gift", icon: "bag-personal" },
-  { id: "sacrifice", icon: "table-furniture" },
-  { id: "battle", icon: "skull" },
-];
-
-export const connectionTypes: string[] = [
-  //one to anything
-  "1-x",
-  //anything to one
-  "x-1",
-  //two to two
-  "22straight",
-  "22divergeleft", // the path on the left diverges to the right and forward
-  "22divergeright",
-  //three to two
-  "32convergeleft", // the left and middle paths converge to the left, the right path continues straight
-  "32convergeright",
-  //two to three
-  "23divergeleft", // the right path continues straight, the left path diverges to the left and forward
-  "23divergeright",
-  //three to three
-  "33straight",
-  "33divergeleft", //left continues forward, middle diverges left and forward, right diverges left and forward
-  "33divergeright", //right continues forward, middle diverges right and forward, left diverges right and forward
-];
-
-export type MapState = {
-  currentDepth: number;
-  selectedNodeId?: string;
-  breaks: Break[];
-};
-
-const randomInt = (min: number, max: number) =>
-  Math.floor(Math.random() * (max - min + 1)) + min;
-
-const pickRandom = <T,>(items: T[]) =>
-  items[randomInt(0, Math.max(items.length - 1, 0))];
-
-const shuffle = <T,>(items: T[]) => {
-  const cloned = [...items];
-  for (let index = cloned.length - 1; index > 0; index -= 1) {
-    const swapIndex = randomInt(0, index);
-    [cloned[index], cloned[swapIndex]] = [cloned[swapIndex], cloned[index]];
-  }
-  return cloned;
-};
-
-const getRandomBreakNodes = (count: number) => {
-  const breakNodePool = nodeList.filter(
-    (node) => node.id !== "start" && node.id !== "battle",
-  );
-  if (count <= breakNodePool.length) {
-    return shuffle(breakNodePool).slice(0, count);
-  }
-  return Array.from({ length: count }, () => pickRandom(breakNodePool));
-};
-
-const getRandomConnectionType = (fromCount: number, toCount: number) => {
-  const compatible = connectionTypes.filter((type) =>
-    Boolean(connectionResolvers[type]?.(fromCount, toCount)),
-  );
-
-  if (compatible.length === 0) {
-    if (fromCount === 1) return "1-x";
-    if (toCount === 1) return "x-1";
-    return "33straight";
-  }
-
-  return pickRandom(compatible);
-};
-
-export const generateRandomMapState = (): MapState => {
-  const breaks: Break[] = [];
-  let depth = 1;
-  const startNode = nodeList.find((node) => node.id === "start") ?? nodeList[0];
-  const newCardNode =
-    nodeList.find((node) => node.id === "newcard") ?? nodeList[1];
-  const battleNode =
-    nodeList.find((node) => node.id === "battle") ?? nodeList[5];
-
-  breaks.push({
-    depth,
-    numOfNodes: 1,
-    connectiontype: [],
-    isBattle: false,
-    nodes: [startNode],
-  });
-  depth += 1;
-
-  for (let battleNumber = 1; battleNumber <= 5; battleNumber += 1) {
-    for (let breakNumber = 0; breakNumber < 2; breakNumber += 1) {
-      const isFirstPlayableBreak = battleNumber === 1 && breakNumber === 0;
-      const numOfNodes = isFirstPlayableBreak ? 1 : randomInt(2, 3);
-      breaks.push({
-        depth,
-        numOfNodes,
-        connectiontype: [],
-        isBattle: false,
-        nodes: isFirstPlayableBreak
-          ? [newCardNode]
-          : getRandomBreakNodes(numOfNodes),
-      });
-      depth += 1;
-    }
-
-    breaks.push({
-      depth,
-      numOfNodes: 1,
-      connectiontype: [],
-      isBattle: true,
-      nodes: [battleNode],
-    });
-    depth += 1;
-  }
-
-  for (let index = 0; index < breaks.length - 1; index += 1) {
-    const currentBreak = breaks[index];
-    const nextBreak = breaks[index + 1];
-    currentBreak.connectiontype = [
-      getRandomConnectionType(currentBreak.numOfNodes, nextBreak.numOfNodes),
-    ];
-  }
-
-  const firstBreak = breaks[0];
-  const firstNode = firstBreak?.nodes[0];
-
-  return {
-    currentDepth: firstBreak?.depth ?? 0,
-    selectedNodeId: firstNode
-      ? makeNodeInstanceId(firstBreak.depth, 0, firstNode)
-      : undefined,
-    breaks,
-  };
-};
-
-export type PlayerPosition = {
-  depth: number;
-  nodeIndex: number;
-  nodeInstanceId?: string;
-};
-
-const makeNodeInstanceId = (depth: number, nodeIndex: number, node?: Node) =>
-  `${depth}-${nodeIndex}-${node?.id ?? "empty"}`;
+import {
+  type MapState,
+  connectionResolvers,
+  generateRandomMapState,
+  makeNodeInstanceId,
+  range,
+} from "../map-generation";
 
 type NodeLayout = {
   depth: number;
@@ -186,45 +32,10 @@ type NodeLayout = {
 const PLAYER_ICON_SIZE = 48;
 const ROUTE_AFTER_MOVE_DELAY_MS = 400;
 
-const range = (count: number) => Array.from({ length: count }, (_, idx) => idx);
 const clampTargets = (targets: number[], toCount: number) =>
   Array.from(new Set(targets)).filter((index) => index >= 0 && index < toCount);
 const fullMatrix = (fromCount: number, toCount: number) =>
   Array.from({ length: fromCount }, () => range(toCount));
-
-const connectionResolvers: Record<
-  string,
-  (fromCount: number, toCount: number) => number[][] | null
-> = {
-  "1-x": (fromCount, toCount) => {
-    if (fromCount !== 1 || toCount < 1) return null;
-    return [range(toCount)];
-  },
-  "x-1": (fromCount, toCount) => {
-    if (toCount !== 1) return null;
-    return Array.from({ length: fromCount }, () => [0]);
-  },
-  "22straight": (fromCount, toCount) =>
-    fromCount === 2 && toCount === 2 ? [[0], [1]] : null,
-  "22divergeleft": (fromCount, toCount) =>
-    fromCount === 2 && toCount === 2 ? [[0, 1], [1]] : null,
-  "22divergeright": (fromCount, toCount) =>
-    fromCount === 2 && toCount === 2 ? [[0], [0, 1]] : null,
-  "32convergeleft": (fromCount, toCount) =>
-    fromCount === 3 && toCount === 2 ? [[0], [0], [1]] : null,
-  "32convergeright": (fromCount, toCount) =>
-    fromCount === 3 && toCount === 2 ? [[0], [1], [1]] : null,
-  "23divergeleft": (fromCount, toCount) =>
-    fromCount === 2 && toCount === 3 ? [[0, 1], [2]] : null,
-  "23divergeright": (fromCount, toCount) =>
-    fromCount === 2 && toCount === 3 ? [[0], [1, 2]] : null,
-  "33straight": (fromCount, toCount) =>
-    fromCount === 3 && toCount === 3 ? [[0], [1], [2]] : null,
-  "33divergeleft": (fromCount, toCount) =>
-    fromCount === 3 && toCount === 3 ? [[0], [0, 1], [1, 2]] : null,
-  "33divergeright": (fromCount, toCount) =>
-    fromCount === 3 && toCount === 3 ? [[0, 1], [1, 2], [2]] : null,
-};
 
 const resolveConnectionMatrix = (
   type: string | undefined,
@@ -594,8 +405,26 @@ export default function MapScreen() {
                         setTimeout(() => {
                           router.push("/(tabs)/campfire");
                         }, ROUTE_AFTER_MOVE_DELAY_MS);
+                      } else if (node.id === "trinket" || node.id === "gift") {
+                        setTimeout(() => {
+                          router.push("/(tabs)/trinket");
+                        }, ROUTE_AFTER_MOVE_DELAY_MS);
                       } else if (node.id === "newcard") {
                         router.push("/(tabs)/newcard");
+                      } else if (node.id === "newcardCost") {
+                        router.push("/(tabs)/newcardCost");
+                      } else if (node.id === "newcardClass") {
+                        setTimeout(() => {
+                          router.push("/(tabs)/newcardClass");
+                        }, ROUTE_AFTER_MOVE_DELAY_MS);
+                      } else if (node.id === "sacrifice") {
+                        setTimeout(() => {
+                          router.push("/(tabs)/sacrifice");
+                        }, ROUTE_AFTER_MOVE_DELAY_MS);
+                      } else if (node.id === "totem") {
+                        setTimeout(() => {
+                          router.push("/(tabs)/totem");
+                        }, ROUTE_AFTER_MOVE_DELAY_MS);
                       }
                     }}
                     onLayout={(event) => {
@@ -619,14 +448,25 @@ export default function MapScreen() {
                       });
                     }}
                   >
-                    <MaterialCommunityIcons
-                      name={
-                        (node?.icon as keyof typeof MaterialCommunityIcons.glyphMap) ??
-                        "circle-slice-8"
-                      }
-                      size={36}
-                      color={isNextReachable ? "#ffffff" : "#000000"}
-                    />
+                    {node?.iconLibrary === "MaterialIcons" ? (
+                      <MaterialIcons
+                        name={
+                          (node?.icon as keyof typeof MaterialIcons.glyphMap) ??
+                          "help-outline"
+                        }
+                        size={36}
+                        color={isNextReachable ? "#ffffff" : "#000000"}
+                      />
+                    ) : (
+                      <MaterialCommunityIcons
+                        name={
+                          (node?.icon as keyof typeof MaterialCommunityIcons.glyphMap) ??
+                          "circle-slice-8"
+                        }
+                        size={36}
+                        color={isNextReachable ? "#ffffff" : "#000000"}
+                      />
+                    )}
                   </Pressable>
                 );
               })}

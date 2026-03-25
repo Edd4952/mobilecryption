@@ -52,10 +52,45 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="newcardCost"
+        options={{
+          href: null,
+          title: "New Card Cost",
+        }}
+      />
+      <Tabs.Screen
+        name="newcardClass"
+        options={{
+          href: null,
+          title: "New Card Class",
+        }}
+      />
+      <Tabs.Screen
         name="campfire"
         options={{
           href: null,
           title: "Campfire",
+        }}
+      />
+      <Tabs.Screen
+        name="sacrifice"
+        options={{
+          href: null,
+          title: "Sacrifice",
+        }}
+      />
+      <Tabs.Screen
+        name="trinket"
+        options={{
+          href: null,
+          title: "Trinket",
+        }}
+      />
+      <Tabs.Screen
+        name="totem"
+        options={{
+          href: null,
+          title: "Totem",
         }}
       />
     </Tabs>

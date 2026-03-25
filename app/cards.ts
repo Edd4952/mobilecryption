@@ -78,6 +78,12 @@ export const sigils: Sigil[] = [
       "When a card bearing this sigil would be struck, it tries to move right, then left. If it moves, a Tail (0 attack, 2 health) is created in its place.",
     icon: "tailwind",
   },
+  {
+    name: "Trinket Bearer",
+    description:
+      "When a card bearing this sigil is played, a random trinket is added to your trinket slots unless your trinket slots are full.",
+    icon: "bag-personal",
+  },
 ];
 
 export const sigilsByName = Object.fromEntries(
@@ -307,4 +313,16 @@ export const miscCards: Card[] = [
     cost: 0,
     costType: "Blood",
   },
+  {
+    name: "Packrat",
+    class: "Miscellaneous",
+    image:
+      "https://static.wikia.nocookie.net/duelyst/images/7/7c/Hawk_card.png/revision/latest?cb=20151109004244",
+    damage: 2,
+    health: 2,
+    sigils: [sigilsByName["Trinket Bearer"]],
+    cost: 2,
+    costType: "Blood",
+  },
+
 ];

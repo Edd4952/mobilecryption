@@ -27,7 +27,7 @@ import {
 } from "react-native";
 import { Card, cards, miscCards, sigils, sigilsByName } from "../cards";
 import { useGameRun } from "../game-state";
-import { type Trinket } from "../trinkets";
+import { trinkets, type Trinket } from "../trinkets";
 
 type BattleCard = Card & {
   turnsOnBoard?: number;
@@ -243,6 +243,28 @@ export default function Battle() {
     setHeldTrinkets((current) => {
       const next = [...current];
       next[slotId] = null;
+      return next;
+    });
+  };
+
+  const grantTrinketFromBearer = (card: BattleCard) => {
+    if (!hasSigil(card, "Trinket Bearer")) {
+      return;
+    }
+
+    setHeldTrinkets((current) => {
+      const emptySlotIndex = current.findIndex((trinket) => trinket === null);
+      if (emptySlotIndex === -1 || trinkets.length === 0) {
+        return current;
+      }
+
+      const next = [...current];
+      const randomTrinket = trinkets[randomInt(0, trinkets.length - 1)];
+      if (!randomTrinket) {
+        return current;
+      }
+
+      next[emptySlotIndex] = { ...randomTrinket };
       return next;
     });
   };
@@ -861,6 +883,7 @@ export default function Battle() {
         next[slotIndex] = cardToPlace;
         return next;
       });
+      grantTrinketFromBearer(cardToPlace);
       setBones((currentBones) => currentBones - cardToPlace.cost);
       setHand((current) => current.filter((_, idx) => idx !== selectedIndex));
       setSelectedIndex(null);
@@ -898,6 +921,7 @@ export default function Battle() {
         next[slotIndex] = cardToPlace;
         return next;
       });
+      grantTrinketFromBearer(cardToPlace);
       setHand((current) => current.filter((_, idx) => idx !== selectedIndex));
       setSelectedIndex(null);
       setSacrificeRequired(0);
@@ -914,6 +938,7 @@ export default function Battle() {
       next[slotIndex] = cardToPlace;
       return next;
     });
+    grantTrinketFromBearer(cardToPlace);
     setHand((current) => current.filter((_, idx) => idx !== selectedIndex));
     setSelectedIndex(null);
     setSacrificeRequired(0);

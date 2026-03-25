@@ -5,12 +5,20 @@ import { ThemedText } from "@/components/themed-text";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
-import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import {
+  Animated,
+  Pressable,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from "react-native";
 
 const CARD_BACK_COUNT = 3;
 const CARD_BASE_WIDTH = 75;
 const CARD_BASE_HEIGHT = 100;
+const CARD_ROUTE_DELAY_MS = 1500;
+const CARD_FALL_DURATION_MS = 250;
 
 const shuffle = <T,>(items: T[]) => {
   const cloned = [...items];
@@ -44,6 +52,10 @@ export default function NewCardScreen() {
   const router = useRouter();
   const { appendCardToDeck } = useGameRun();
   const { width: screenWidth } = useWindowDimensions();
+  const routeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cardTranslateY = useRef(
+    Array.from({ length: CARD_BACK_COUNT }, () => new Animated.Value(0)),
+  ).current;
 
   const [cardChoices, setCardChoices] = useState<Card[]>(() =>
     pickThreeCards(cards),
@@ -65,16 +77,26 @@ export default function NewCardScreen() {
 
   // Reset the screen whenever it becomes focused again (e.g., after routing back from the map)
   const resetScreen = useCallback(() => {
+    if (routeTimeoutRef.current) {
+      clearTimeout(routeTimeoutRef.current);
+      routeTimeoutRef.current = null;
+    }
+
+    cardTranslateY.forEach((value) => value.setValue(0));
     setCardChoices(pickThreeCards(cards));
     setRevealedIndices([]);
     setSelectedIndex(null);
-  }, []);
+  }, [cardTranslateY]);
 
   useFocusEffect(
     useCallback(() => {
       resetScreen();
-      // no cleanup needed
-      return undefined;
+      return () => {
+        if (routeTimeoutRef.current) {
+          clearTimeout(routeTimeoutRef.current);
+          routeTimeoutRef.current = null;
+        }
+      };
     }, [resetScreen]),
   );
 
@@ -90,7 +112,16 @@ export default function NewCardScreen() {
     if (!chosenCard) return;
     appendCardToDeck(chosenCard);
     setSelectedIndex(index);
-    router.replace("/(tabs)/map");
+
+    Animated.timing(cardTranslateY[index], {
+      toValue: 500,
+      duration: CARD_FALL_DURATION_MS,
+      useNativeDriver: true,
+    }).start();
+
+    routeTimeoutRef.current = setTimeout(() => {
+      router.replace("/(tabs)/map");
+    }, CARD_ROUTE_DELAY_MS);
   };
 
   return (
@@ -108,22 +139,26 @@ export default function NewCardScreen() {
               style={styles.cardSlot}
               onPress={() => handleCardPress(index)}
             >
-              {isRevealed ? (
-                <CardView card={card} width={cardWidth} height={cardHeight} />
-              ) : (
-                <View
-                  style={[
-                    styles.cardBack,
-                    { width: cardWidth, height: cardHeight },
-                  ]}
-                >
-                  <MaterialCommunityIcons
-                    name="cards-playing-outline"
-                    size={56}
-                    color="black"
-                  />
-                </View>
-              )}
+              <Animated.View
+                style={{ transform: [{ translateY: cardTranslateY[index] }] }}
+              >
+                {isRevealed ? (
+                  <CardView card={card} width={cardWidth} height={cardHeight} />
+                ) : (
+                  <View
+                    style={[
+                      styles.cardBack,
+                      { width: cardWidth, height: cardHeight },
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name="cards-playing-outline"
+                      size={56}
+                      color="black"
+                    />
+                  </View>
+                )}
+              </Animated.View>
             </Pressable>
           );
         })}
