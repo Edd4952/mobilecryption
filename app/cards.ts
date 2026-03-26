@@ -12,6 +12,7 @@ export type Card = {
   damage: number;
   health: number;
   sigils: Sigil[];
+  bonusSigilNames?: string[];
   cost: number;
   costType?: "Blood" | "Bone";
 };
@@ -324,5 +325,4 @@ export const miscCards: Card[] = [
     cost: 2,
     costType: "Blood",
   },
-
 ];

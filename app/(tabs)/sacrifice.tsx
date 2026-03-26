@@ -32,6 +32,7 @@ type SlottedCard = {
 const cloneCard = (card: Card): Card => ({
   ...card,
   sigils: card.sigils.map((sigil) => ({ ...sigil })),
+  bonusSigilNames: [...(card.bonusSigilNames ?? [])],
 });
 
 export default function SacrificeScreen() {
@@ -93,7 +94,9 @@ export default function SacrificeScreen() {
         }
 
         if (activeSurface === "sacrifice") {
-          return card.sigils.length > 0;
+          return (
+            card.sigils.length > 0 || (card.bonusSigilNames?.length ?? 0) > 0
+          );
         }
 
         return true;
@@ -171,15 +174,26 @@ export default function SacrificeScreen() {
             const existingSigilNames = new Set(
               recipientCard.card.sigils.map((sigil) => sigil.name),
             );
-            const transferredSigils = sacrificeCard.card.sigils
-              .filter((sigil) => !existingSigilNames.has(sigil.name))
-              .map((sigil) => ({ ...sigil }));
+            const existingOverlayNames = new Set(
+              recipientCard.card.bonusSigilNames ?? [],
+            );
+            const sacrificeSigilNames = [
+              ...sacrificeCard.card.sigils.map((sigil) => sigil.name),
+              ...(sacrificeCard.card.bonusSigilNames ?? []),
+            ];
+            const transferredSigilNames = [
+              ...new Set(sacrificeSigilNames),
+            ].filter(
+              (name) =>
+                !existingSigilNames.has(name) &&
+                !existingOverlayNames.has(name),
+            );
 
             const nextRecipient: Card = {
               ...recipientCard.card,
-              sigils: [
-                ...recipientCard.card.sigils.map((sigil) => ({ ...sigil })),
-                ...transferredSigils,
+              bonusSigilNames: [
+                ...(recipientCard.card.bonusSigilNames ?? []),
+                ...transferredSigilNames,
               ],
             };
 
@@ -202,7 +216,7 @@ export default function SacrificeScreen() {
 
             setRecipientCard({ ...recipientCard, card: nextRecipient });
             setSacrificeCard(null);
-            setTransferredSigilCount(transferredSigils.length);
+            setTransferredSigilCount(transferredSigilNames.length);
             setIsResolvingSacrifice(true);
             setActiveSurface(null);
 

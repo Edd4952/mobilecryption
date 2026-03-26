@@ -4,7 +4,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import Fontisto from "@expo/vector-icons/Fontisto";
 import { Image } from "expo-image";
-import React from "react";
+import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 type CardViewProps = {
@@ -13,6 +13,12 @@ type CardViewProps = {
   height?: number;
   scale?: number;
   displayDamage?: number;
+  overlaySigil?: Card["sigils"][number] | null;
+  overlaySigils?: {
+    sigil: Card["sigils"][number];
+    color?: string;
+    side?: "left" | "right";
+  }[];
   onInfoPress?: (card: Card) => void;
 };
 
@@ -26,6 +32,8 @@ export function CardView({
   height,
   scale,
   displayDamage,
+  overlaySigil,
+  overlaySigils,
   onInfoPress,
 }: CardViewProps) {
   const resolvedWidth = width ?? BASE_WIDTH;
@@ -34,26 +42,53 @@ export function CardView({
   const sigilIconSize = (card.sigils.length > 1 ? 10 : 20) * resolvedScale;
   const isBoneCost = card.costType === "Bone";
   const renderedDamage = displayDamage ?? card.damage;
-  const styles = makeStyles(resolvedScale, resolvedWidth, resolvedHeight);
+  const styles = makeStyles(
+    resolvedScale,
+    resolvedWidth,
+    resolvedHeight,
+    sigilIconSize,
+  );
+  const normalizedOverlaySigils = useMemo(() => {
+    const fromSingle = overlaySigil
+      ? [{ sigil: overlaySigil, side: "left" as const, color: "#ff0000" }]
+      : [];
+    const fromList = (overlaySigils ?? []).map((entry) => ({
+      sigil: entry.sigil,
+      side: entry.side ?? "left",
+      color: entry.color ?? "#ffffff",
+    }));
+    return [...fromSingle, ...fromList];
+  }, [overlaySigil, overlaySigils]);
+  const leftOverlays = normalizedOverlaySigils.filter(
+    (entry) => entry.side === "left",
+  );
+  const rightOverlays = normalizedOverlaySigils.filter(
+    (entry) => entry.side === "right",
+  );
 
-  const renderSigilIcon = (sigil: Card["sigils"][number], index: number) => {
+  const renderSigilIcon = (
+    sigil: Card["sigils"][number],
+    key: string,
+    size: number = sigilIconSize,
+    color: string = "#ffffff",
+  ) => {
     if (sigil.iconLibrary === "FontAwesome6") {
       return (
         <FontAwesome6
-          key={`${sigil.name}-${index}`}
+          key={key}
           name={sigil.icon as keyof typeof FontAwesome6.glyphMap}
-          size={sigilIconSize}
-          color="#ffffff"
+          size={size}
+          color={color}
         />
       );
     }
 
     return (
       <MaterialCommunityIcons
-        key={`${sigil.name}-${index}`}
+        key={key}
         name={sigil.icon as keyof typeof MaterialCommunityIcons.glyphMap}
-        size={sigilIconSize}
-        color="#ffffff"
+        size={size}
+        color={color}
       />
     );
   };
@@ -95,6 +130,56 @@ export function CardView({
             ),
           )}
         </View>
+        {normalizedOverlaySigils.length > 0 ? (
+          <View pointerEvents="none" style={styles.overlaySigilLayer}>
+            {leftOverlays.map((entry, index) => {
+              const offset =
+                (index - (leftOverlays.length - 1) / 2) *
+                (sigilIconSize + 2 * resolvedScale);
+              return (
+                <View
+                  key={`${entry.sigil.name}-overlay-left-${index}`}
+                  style={[
+                    styles.overlayLeftSigil,
+                    {
+                      transform: [{ translateY: -sigilIconSize / 2 + offset }],
+                    },
+                  ]}
+                >
+                  {renderSigilIcon(
+                    entry.sigil,
+                    `${entry.sigil.name}-overlay-left-icon-${index}`,
+                    sigilIconSize,
+                    entry.color,
+                  )}
+                </View>
+              );
+            })}
+            {rightOverlays.map((entry, index) => {
+              const offset =
+                (index - (rightOverlays.length - 1) / 2) *
+                (sigilIconSize + 2 * resolvedScale);
+              return (
+                <View
+                  key={`${entry.sigil.name}-overlay-right-${index}`}
+                  style={[
+                    styles.overlayRightSigil,
+                    {
+                      transform: [{ translateY: -sigilIconSize / 2 + offset }],
+                    },
+                  ]}
+                >
+                  {renderSigilIcon(
+                    entry.sigil,
+                    `${entry.sigil.name}-overlay-right-icon-${index}`,
+                    sigilIconSize,
+                    entry.color,
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
       </View>
       <View style={styles.cardinfo}>
         <ThemedText style={styles.cardinfotext}>{renderedDamage}</ThemedText>
@@ -105,7 +190,9 @@ export function CardView({
           onPress={() => onInfoPress?.(card)}
           hitSlop={6}
         >
-          {card.sigils.map((sigil, index) => renderSigilIcon(sigil, index))}
+          {card.sigils.map((sigil, index) =>
+            renderSigilIcon(sigil, `${sigil.name}-${index}`),
+          )}
         </Pressable>
 
         <ThemedText style={styles.cardinfotext}>{card.health}</ThemedText>
@@ -114,7 +201,12 @@ export function CardView({
   );
 }
 
-const makeStyles = (scale: number, width: number, height: number) =>
+const makeStyles = (
+  scale: number,
+  width: number,
+  height: number,
+  sigilIconSize: number,
+) =>
   StyleSheet.create({
     card: {
       width,
@@ -140,15 +232,31 @@ const makeStyles = (scale: number, width: number, height: number) =>
       width: "100%",
       position: "relative",
     },
+    overlaySigilLayer: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    overlayLeftSigil: {
+      position: "absolute",
+      left: 4 * scale,
+      top: "55%",
+      borderColor: "#ff0000",
+      borderWidth: 3 * scale,
+    },
+    overlayRightSigil: {
+      position: "absolute",
+      right: 4 * scale,
+      top: "55%",
+      borderColor: "#00ffff",
+      borderWidth: 3 * scale,
+    },
     costBadge: {
       position: "absolute",
-      top: 4 * scale,
+      top: -4 * scale,
       right: 4 * scale,
       flexDirection: "row",
       alignItems: "center",
-      gap: 2 * scale,
+      gap: 1 * scale,
       paddingHorizontal: 3 * scale,
-      paddingVertical: 2 * scale,
       borderRadius: 10 * scale,
     },
     name: {

@@ -12,10 +12,21 @@ import { cards, type Card } from "./cards";
 import { generateRandomMapState, type MapState } from "./map-generation";
 import { trinkets, type Trinket } from "./trinkets";
 
+export type TotemState = {
+  headClass: Card["class"] | null;
+  bodySigilName: string | null;
+};
+
+const DEFAULT_TOTEM: TotemState = {
+  headClass: "Canine",
+  bodySigilName: "Flying",
+};
+
 type GameRunState = {
   map: MapState;
   deck: Card[];
   trinkets: (Trinket | null)[];
+  totem: TotemState;
   canContinue: boolean;
 };
 
@@ -26,6 +37,7 @@ type GameRunContextValue = {
   setMapState: React.Dispatch<React.SetStateAction<MapState>>;
   setDeck: React.Dispatch<React.SetStateAction<Card[]>>;
   setTrinkets: React.Dispatch<React.SetStateAction<(Trinket | null)[]>>;
+  setTotem: React.Dispatch<React.SetStateAction<TotemState>>;
   appendCardToDeck: (card: Card) => void;
   replaceDeckCardAt: (index: number, card: Card) => void;
 };
@@ -34,10 +46,15 @@ const GAME_RUN_STORAGE_KEY = "@mobilecryption_game_run_v1";
 
 const createInitialRunState = (): GameRunState => ({
   map: generateRandomMapState(),
-  deck: cards.slice(0, 3).map((card) => ({ ...card })),
+  deck: cards.slice(0, 3).map((card) => ({
+    ...card,
+    sigils: card.sigils.map((sigil) => ({ ...sigil })),
+    bonusSigilNames: [...(card.bonusSigilNames ?? [])],
+  })),
   trinkets: [trinkets[0], trinkets[1], null].map((item) =>
     item ? { ...item } : null,
   ),
+  totem: { ...DEFAULT_TOTEM },
   canContinue: true,
 });
 
@@ -69,6 +86,7 @@ export const GameRunProvider = ({
         if (isMounted) {
           setGameRun({
             ...parsed,
+            totem: parsed.totem ?? { ...DEFAULT_TOTEM },
             canContinue: parsed.canContinue ?? true,
           });
         }
@@ -137,10 +155,26 @@ export const GameRunProvider = ({
     }));
   };
 
+  const setTotem: React.Dispatch<React.SetStateAction<TotemState>> = (
+    updater,
+  ) => {
+    setGameRun((current) => ({
+      ...current,
+      totem: typeof updater === "function" ? updater(current.totem) : updater,
+    }));
+  };
+
   const appendCardToDeck = (card: Card) => {
     setGameRun((current) => ({
       ...current,
-      deck: [...current.deck, { ...card }],
+      deck: [
+        ...current.deck,
+        {
+          ...card,
+          sigils: card.sigils.map((sigil) => ({ ...sigil })),
+          bonusSigilNames: [...(card.bonusSigilNames ?? [])],
+        },
+      ],
     }));
   };
 
@@ -154,6 +188,7 @@ export const GameRunProvider = ({
       nextDeck[index] = {
         ...card,
         sigils: card.sigils.map((sigil) => ({ ...sigil })),
+        bonusSigilNames: [...(card.bonusSigilNames ?? [])],
       };
 
       return {
@@ -171,6 +206,7 @@ export const GameRunProvider = ({
       setMapState,
       setDeck,
       setTrinkets,
+      setTotem,
       appendCardToDeck,
       replaceDeckCardAt,
     }),

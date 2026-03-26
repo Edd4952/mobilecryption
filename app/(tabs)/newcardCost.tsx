@@ -27,6 +27,7 @@ type CardChoice = {
   card: Card;
 };
 
+// Returns a new array with items in random order using Fisher-Yates.
 const shuffle = <T,>(items: T[]) => {
   const cloned = [...items];
   for (let index = cloned.length - 1; index > 0; index -= 1) {
@@ -36,6 +37,7 @@ const shuffle = <T,>(items: T[]) => {
   return cloned;
 };
 
+// Creates a deep-enough copy so selected cards do not mutate shared card data.
 const cloneCard = (card: Card): Card => ({
   ...card,
   sigils: card.sigils.map((sigil) => ({ ...sigil })),
@@ -58,12 +60,14 @@ const availableBuckets = (Object.keys(cardsByBucket) as CostBucket[]).filter(
   (bucket) => cardsByBucket[bucket].length > 0,
 );
 
+// Picks one random card from a cost bucket and returns a cloned instance.
 const pickCardForBucket = (bucket: CostBucket): Card => {
   const pool = cardsByBucket[bucket];
   const card = pool[Math.floor(Math.random() * pool.length)] ?? pool[0];
   return cloneCard(card);
 };
 
+// Chooses up to 3 unique buckets, then builds one hidden card choice per bucket.
 const pickCardChoices = (): CardChoice[] =>
   shuffle(availableBuckets)
     .slice(0, CARD_CHOICE_COUNT)
@@ -72,6 +76,7 @@ const pickCardChoices = (): CardChoice[] =>
       card: pickCardForBucket(bucket),
     }));
 
+// Renders the card back that communicates cost type: blood drops or bone icon.
 const CostBack = ({
   bucket,
   width,
@@ -112,6 +117,10 @@ const CostBack = ({
   );
 };
 
+// Screen flow:
+// 1) Show hidden backs that reveal only cost.
+// 2) First tap reveals one card and animates others away.
+// 3) Second tap on the same card confirms, adds to deck, then routes to map.
 export default function NewCardCostScreen() {
   const router = useRouter();
   const { appendCardToDeck } = useGameRun();
@@ -139,6 +148,7 @@ export default function NewCardCostScreen() {
     [cardWidth],
   );
 
+  // Resets transient UI and picks fresh choices each time this screen is focused.
   const resetScreen = useCallback(() => {
     if (routeTimeoutRef.current) {
       clearTimeout(routeTimeoutRef.current);
@@ -163,6 +173,9 @@ export default function NewCardCostScreen() {
     }, [resetScreen]),
   );
 
+  // Handles a two-step pick:
+  // - first tap selects/reveals and hides non-selected cards
+  // - second tap on the same card confirms the reward and navigates away
   const handleCardPress = (index: number) => {
     if (isResolvingSelection) return;
 
