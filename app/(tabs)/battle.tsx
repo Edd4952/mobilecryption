@@ -1,5 +1,6 @@
 import { CardView } from "@/components/card-view";
 import { ThemedText } from "@/components/themed-text";
+import { TotemView } from "@/components/totem-view";
 import {
   FontAwesome,
   FontAwesome6,
@@ -198,16 +199,12 @@ export default function Battle() {
   const cloneCard = (card: Card | BattleCard): BattleCard => ({
     ...card,
     sigils: card.sigils.map((sigil) => ({ ...sigil })),
-    bonusSigilNames: [...(card.bonusSigilNames ?? [])],
     turnsOnBoard: (card as BattleCard).turnsOnBoard ?? 0,
     fledglingUsed: (card as BattleCard).fledglingUsed ?? false,
   });
 
-  const hasPrintedSigil = (card: BattleCard | null, sigilName: string) =>
+  const hasSigil = (card: BattleCard | null, sigilName: string) =>
     Boolean(card?.sigils.some((sigil) => sigil.name === sigilName));
-
-  const hasSacrificeBonusSigil = (card: BattleCard | null, sigilName: string) =>
-    Boolean(card?.bonusSigilNames?.includes(sigilName));
 
   const shouldApplyTotemToCard = (
     card: BattleCard | Card | null,
@@ -226,37 +223,10 @@ export default function Battle() {
     sigilName: string,
     isPlayerCard: boolean,
   ) =>
-    hasPrintedSigil(card, sigilName) ||
-    (isPlayerCard && hasSacrificeBonusSigil(card, sigilName)) ||
+    hasSigil(card, sigilName) ||
     (Boolean(totemBodySigil) &&
       totemBodySigil?.name === sigilName &&
       shouldApplyTotemToCard(card, isPlayerCard));
-
-  const getSacrificeOverlaySigils = (
-    card: BattleCard | Card | null,
-    isPlayerCard: boolean,
-  ) => {
-    if (!card || !isPlayerCard) {
-      return [] as Card["sigils"];
-    }
-
-    return (card.bonusSigilNames ?? [])
-      .map((name) => sigilsByName[name] ?? null)
-      .filter((sigil): sigil is Card["sigils"][number] => Boolean(sigil));
-  };
-
-  const hasSlotSigil = (
-    localSlots: (BattleCard | null)[],
-    slotIndex: number,
-    sigilName: string,
-  ) => {
-    const card = localSlots[slotIndex];
-    if (!card) {
-      return false;
-    }
-    const isPlayerSlot = slotIndex >= 8 && slotIndex <= 11;
-    return hasBattleSigil(card, sigilName, isPlayerSlot);
-  };
 
   const isAntName = (name: string) => name === "Ant" || name === "Alate";
 
@@ -293,16 +263,12 @@ export default function Battle() {
     options?: { isPlayerCard?: boolean },
   ) => {
     const firstSigilName = card.sigils[0]?.name;
-    const sacrificeSigilName = options?.isPlayerCard
-      ? card.bonusSigilNames?.[0]
-      : undefined;
     const totemSigilName =
-      !firstSigilName && !sacrificeSigilName && options?.isPlayerCard
+      !firstSigilName && options?.isPlayerCard
         ? totemBodySigil?.name
         : undefined;
     const targetKey =
       firstSigilName ??
-      sacrificeSigilName ??
       totemSigilName ??
       (isAntName(card.name) ? ANT_RULE_KEY : null);
     setRulebookTargetKey(targetKey);
@@ -432,10 +398,16 @@ export default function Battle() {
     const left = attackerSlot - 1;
     const right = attackerSlot + 1;
 
-    if (left >= rowStart && hasSlotSigil(localSlots, left, "Leader")) {
+    if (
+      left >= rowStart &&
+      hasBattleSigil(localSlots[left], "Leader", inPlayerRow)
+    ) {
       bonus += 1;
     }
-    if (right <= rowEnd && hasSlotSigil(localSlots, right, "Leader")) {
+    if (
+      right <= rowEnd &&
+      hasBattleSigil(localSlots[right], "Leader", inPlayerRow)
+    ) {
       bonus += 1;
     }
 
@@ -496,7 +468,7 @@ export default function Battle() {
 
     if (
       !attacker ||
-      !hasSlotSigil(localSlots, attackerSlot, "Bifurcated Strike")
+      !hasBattleSigil(attacker, "Bifurcated Strike", isPlayerAttack)
     ) {
       return [targetRowStart + lane];
     }
@@ -530,9 +502,11 @@ export default function Battle() {
       let card = originalCard;
       let direction: -1 | 1 | null = null;
 
-      if (hasSlotSigil(localSlots, slot, "Sprinter")) {
+      const isPlayerRow = rowStart >= 8;
+
+      if (hasBattleSigil(card, "Sprinter", isPlayerRow)) {
         direction = 1;
-      } else if (hasSlotSigil(localSlots, slot, "Sprint left")) {
+      } else if (hasBattleSigil(card, "Sprint left", isPlayerRow)) {
         direction = -1;
       }
 
@@ -608,33 +582,38 @@ export default function Battle() {
         turnsOnBoard,
       };
 
+      const isPlayerSlot = slot >= 8 && slot <= 11;
+
       if (
-        hasSlotSigil(nextSlots, slot, "Fledgling") &&
+        hasBattleSigil(nextCard, "Fledgling", isPlayerSlot) &&
         !nextCard.fledglingUsed &&
         turnsOnBoard >= 1
       ) {
         const evolvedTemplate = evolvedByName[nextCard.name as "Cub" | "Fawn"];
         if (evolvedTemplate) {
-          const sourceWasSprintLeft = hasSlotSigil(
-            nextSlots,
-            slot,
+          const sourceWasSprintLeft = hasBattleSigil(
+            nextCard,
             "Sprint left",
+            isPlayerSlot,
           );
-          const sourceWasSprinter = hasSlotSigil(nextSlots, slot, "Sprinter");
+          const sourceWasSprinter = hasBattleSigil(
+            nextCard,
+            "Sprinter",
+            isPlayerSlot,
+          );
           let evolvedCard = cloneCard(evolvedTemplate);
 
-          if (sourceWasSprintLeft && hasPrintedSigil(evolvedCard, "Sprinter")) {
+          if (sourceWasSprintLeft && hasSigil(evolvedCard, "Sprinter")) {
             evolvedCard = setSigilName(evolvedCard, "Sprinter", "Sprint left");
           } else if (
             sourceWasSprinter &&
-            hasPrintedSigil(evolvedCard, "Sprint left")
+            hasSigil(evolvedCard, "Sprint left")
           ) {
             evolvedCard = setSigilName(evolvedCard, "Sprint left", "Sprinter");
           }
 
           nextCard = {
             ...evolvedCard,
-            bonusSigilNames: [...(nextCard.bonusSigilNames ?? [])],
             turnsOnBoard,
             fledglingUsed: true,
           };
@@ -1171,7 +1150,9 @@ export default function Battle() {
           return;
         }
 
-        if (hasSlotSigil(localSlots, targetSlot, "Tailwind")) {
+        const isPlayerDefender = targetSlot >= 8 && targetSlot <= 11;
+
+        if (hasBattleSigil(defender, "Tailwind", isPlayerDefender)) {
           const moveToSlot = getLooseTailDestination(targetSlot);
           if (moveToSlot !== null) {
             const movedDefender: BattleCard = {
@@ -1253,27 +1234,29 @@ export default function Battle() {
           }
 
           const defender = localSlots[targetSlot];
+          const isPlayerDefender = targetSlot >= 8 && targetSlot <= 11;
           const attackerHasFlying =
-            hasSlotSigil(localSlots, attackerSlot, "Flying") ||
+            hasBattleSigil(currentAttacker, "Flying", isPlayerAttack) ||
             (isPlayerAttack && hasPlayerFan);
           const bypassesBlock =
             attackerHasFlying &&
-            (!defender || !hasSlotSigil(localSlots, targetSlot, "Mighty Leap"));
+            (!defender ||
+              !hasBattleSigil(defender, "Mighty Leap", isPlayerDefender));
 
           if (!defender || bypassesBlock) {
             await applyDirectDamage(damage, isPlayerAttack);
             continue;
           }
 
-          const attackerHasTouchOfDeath = hasSlotSigil(
-            localSlots,
-            attackerSlot,
+          const attackerHasTouchOfDeath = hasBattleSigil(
+            currentAttacker,
             "Touch of Death",
+            isPlayerAttack,
           );
-          const defenderHasPrickly = hasSlotSigil(
-            localSlots,
-            targetSlot,
+          const defenderHasPrickly = hasBattleSigil(
+            defender,
             "Prickly",
+            isPlayerDefender,
           );
           const pricklyDamage = 1;
 
@@ -1475,27 +1458,6 @@ export default function Battle() {
             const displayedDamage = cardInSlot
               ? getCardPower(slotCards, id) + getLeaderBonus(slotCards, id)
               : undefined;
-            const isPlayerBattleSlot = id >= 8 && id <= 11;
-            const slotOverlaySigils = [
-              ...(cardInSlot &&
-              shouldApplyTotemToCard(cardInSlot, isPlayerBattleSlot) &&
-              totemBodySigil
-                ? [
-                    {
-                      sigil: totemBodySigil,
-                      side: "left" as const,
-                      color: "#ff0000",
-                    },
-                  ]
-                : []),
-              ...getSacrificeOverlaySigils(cardInSlot, isPlayerBattleSlot).map(
-                (sigil) => ({
-                  sigil,
-                  side: "right" as const,
-                  color: "#5eead4",
-                }),
-              ),
-            ];
             const isPlaceable = placeableSlots.has(id);
             const isSacrificeMode =
               selectedIndex !== null && sacrificeRequired > 0;
@@ -1538,10 +1500,23 @@ export default function Battle() {
                       width={slotSize?.width}
                       height={slotSize?.height}
                       displayDamage={displayedDamage}
-                      overlaySigils={slotOverlaySigils}
+                      overlaySigils={
+                        shouldApplyTotemToCard(
+                          cardInSlot,
+                          id >= 8 && id <= 11,
+                        ) && totemBodySigil
+                          ? [
+                              {
+                                sigil: totemBodySigil,
+                                side: "left",
+                                color: "#ff0000",
+                              },
+                            ]
+                          : []
+                      }
                       onInfoPress={(card) =>
                         handleOpenRulebookForCard(card, {
-                          isPlayerCard: isPlayerBattleSlot,
+                          isPlayerCard: id >= 8 && id <= 11,
                         })
                       }
                     />
@@ -1573,22 +1548,17 @@ export default function Battle() {
             >
               <CardView
                 card={card}
-                overlaySigils={[
-                  ...(shouldApplyTotemToCard(card, true) && totemBodySigil
+                overlaySigils={
+                  shouldApplyTotemToCard(card, true) && totemBodySigil
                     ? [
                         {
                           sigil: totemBodySigil,
-                          side: "left" as const,
+                          side: "left",
                           color: "#ff0000",
                         },
                       ]
-                    : []),
-                  ...getSacrificeOverlaySigils(card, true).map((sigil) => ({
-                    sigil,
-                    side: "right" as const,
-                    color: "#5eead4",
-                  })),
-                ]}
+                    : []
+                }
                 onInfoPress={(selectedCard) =>
                   handleOpenRulebookForCard(selectedCard, {
                     isPlayerCard: true,
@@ -1648,6 +1618,15 @@ export default function Battle() {
                 />
               </Pressable>
             </View>
+            {totemHeadClass && totemBodySigil ? (
+              <TotemView
+                headClass={
+                  totemHeadClass as Exclude<Card["class"], "Miscellaneous">
+                }
+                bodySigilName={totemBodySigil.name}
+                size={38}
+              />
+            ) : null}
           </View>
 
           {/*grab more cards*/}
@@ -1657,7 +1636,7 @@ export default function Battle() {
             <Pressable
               style={{
                 padding: 12,
-                backgroundColor: "#b28920",
+                backgroundColor: "#ff8a5c",
                 borderRadius: 4,
                 height: 92,
                 width: 69,

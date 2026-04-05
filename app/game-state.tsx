@@ -15,11 +15,28 @@ import { trinkets, type Trinket } from "./trinkets";
 export type TotemState = {
   headClass: Card["class"] | null;
   bodySigilName: string | null;
+  collectedHeads: Card["class"][];
+  collectedBodies: string[];
+  offerParts: (
+    | {
+        kind: "head";
+        key: string;
+        value: Exclude<Card["class"], "Miscellaneous">;
+      }
+    | {
+        kind: "body";
+        key: string;
+        value: string;
+      }
+  )[];
 };
 
 const DEFAULT_TOTEM: TotemState = {
-  headClass: "Canine",
-  bodySigilName: "Flying",
+  headClass: null,
+  bodySigilName: null,
+  collectedHeads: [],
+  collectedBodies: [],
+  offerParts: [],
 };
 
 type GameRunState = {
@@ -46,11 +63,7 @@ const GAME_RUN_STORAGE_KEY = "@mobilecryption_game_run_v1";
 
 const createInitialRunState = (): GameRunState => ({
   map: generateRandomMapState(),
-  deck: cards.slice(0, 3).map((card) => ({
-    ...card,
-    sigils: card.sigils.map((sigil) => ({ ...sigil })),
-    bonusSigilNames: [...(card.bonusSigilNames ?? [])],
-  })),
+  deck: cards.slice(0, 3).map((card) => ({ ...card })),
   trinkets: [trinkets[0], trinkets[1], null].map((item) =>
     item ? { ...item } : null,
   ),
@@ -86,7 +99,13 @@ export const GameRunProvider = ({
         if (isMounted) {
           setGameRun({
             ...parsed,
-            totem: parsed.totem ?? { ...DEFAULT_TOTEM },
+            totem: {
+              headClass: parsed.totem?.headClass ?? null,
+              bodySigilName: parsed.totem?.bodySigilName ?? null,
+              collectedHeads: parsed.totem?.collectedHeads ?? [],
+              collectedBodies: parsed.totem?.collectedBodies ?? [],
+              offerParts: parsed.totem?.offerParts ?? [],
+            },
             canContinue: parsed.canContinue ?? true,
           });
         }
@@ -167,14 +186,7 @@ export const GameRunProvider = ({
   const appendCardToDeck = (card: Card) => {
     setGameRun((current) => ({
       ...current,
-      deck: [
-        ...current.deck,
-        {
-          ...card,
-          sigils: card.sigils.map((sigil) => ({ ...sigil })),
-          bonusSigilNames: [...(card.bonusSigilNames ?? [])],
-        },
-      ],
+      deck: [...current.deck, { ...card }],
     }));
   };
 
@@ -188,7 +200,6 @@ export const GameRunProvider = ({
       nextDeck[index] = {
         ...card,
         sigils: card.sigils.map((sigil) => ({ ...sigil })),
-        bonusSigilNames: [...(card.bonusSigilNames ?? [])],
       };
 
       return {
