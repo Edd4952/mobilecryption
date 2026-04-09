@@ -1,9 +1,7 @@
 import { useGameRun } from "@/app/game-state";
 import { CardView } from "@/components/card-view";
-import { ThemedText } from "@/components/themed-text";
-import { Fonts } from "@/constants/theme";
 import { MaterialCommunityIcons, MaterialIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   Animated,
@@ -13,6 +11,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Text,
   View,
 } from "react-native";
 import Svg, { Line } from "react-native-svg";
@@ -31,6 +30,11 @@ type NodeLayout = {
 
 const PLAYER_ICON_SIZE = 48;
 const ROUTE_AFTER_MOVE_DELAY_MS = 400;
+const MAP_THEME_COLORS: Record<1 | 2 | 3, string> = {
+  1: "#af721d",
+  2: "#1daf57",
+  3: "#5fbbd5",
+};
 
 const clampTargets = (targets: number[], toCount: number) =>
   Array.from(new Set(targets)).filter((index) => index >= 0 && index < toCount);
@@ -51,14 +55,26 @@ const resolveConnectionMatrix = (
   return matrix.map((targets) => clampTargets(targets, toCount));
 };
 
+const parseNodeInstanceId = (nodeInstanceId: string) => {
+  const match = nodeInstanceId.match(/^(\d+)-(\d+)-/);
+  if (!match) return null;
+
+  return {
+    depth: Number(match[1]),
+    nodeIndex: Number(match[2]),
+  };
+};
+
 export const sampleMapState: MapState = generateRandomMapState();
 
 export default function MapScreen() {
   const router = useRouter();
   const {
-    gameRun: { deck, map },
+    gameRun: { deck, map, mapThemeNumber, mapNumber, levelDifficulty },
+    advanceToNextMap,
     setMapState,
   } = useGameRun();
+  const lastCompletedMapNumberRef = useRef<number | null>(null);
   const [deckModalVisible, setDeckModalVisible] = useState(false);
   const swipeToDeckResponder = useMemo(
     () =>
@@ -90,6 +106,7 @@ export default function MapScreen() {
     : undefined;
 
   const selectedNodeId = map.selectedNodeId ?? initialNodeInstanceId;
+  const activeThemeColor = MAP_THEME_COLORS[mapThemeNumber];
   const playerPosition = useMemo(
     () =>
       map.playerPosition ?? {
@@ -162,6 +179,41 @@ export default function MapScreen() {
       playerPosition,
     }));
   }, [map.playerPosition, playerPosition, setMapState]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (
+        !map.selectedNodeId ||
+        map.selectedNodeId === map.playerPosition.nodeInstanceId
+      ) {
+        return;
+      }
+
+      setMapState((current) => {
+        if (
+          !current.selectedNodeId ||
+          current.selectedNodeId === current.playerPosition.nodeInstanceId
+        ) {
+          return current;
+        }
+
+        const parsedSelection = parseNodeInstanceId(current.selectedNodeId);
+        if (!parsedSelection) {
+          return current;
+        }
+
+        return {
+          ...current,
+          currentDepth: parsedSelection.depth,
+          playerPosition: {
+            depth: parsedSelection.depth,
+            nodeIndex: parsedSelection.nodeIndex,
+            nodeInstanceId: current.selectedNodeId,
+          },
+        };
+      });
+    }, [map.playerPosition.nodeInstanceId, map.selectedNodeId, setMapState]),
+  );
 
   const [rowLayouts, setRowLayouts] = useState<
     Record<number, { x: number; y: number; width: number; height: number }>
@@ -289,28 +341,58 @@ export default function MapScreen() {
             y1={fromCenter.y}
             x2={toCenter.x}
             y2={toCenter.y}
-            stroke="#ffce79ad"
+            stroke={`${activeThemeColor}aa`}
             strokeWidth={5}
             strokeLinecap="round"
           />
         );
       })
       .filter(Boolean);
-  }, [allConnections, nodeLayouts, rowLayouts]);
+  }, [activeThemeColor, allConnections, nodeLayouts, rowLayouts]);
 
   const [mapCanvasLayout, setMapCanvasLayout] = useState({
     width: 0,
     height: 0,
   });
 
-  return (
-    <View style={styles.container}>
-      <Pressable onPress={() => router.push("/")}>
-        <ThemedText type="title" style={{ fontFamily: Fonts.rounded }}>
-          Map Screen
-        </ThemedText>
-      </Pressable>
+  useFocusEffect(
+    useCallback(() => {
+      const currentBreakIndex = depthToIndex[playerPosition.depth];
+      if (currentBreakIndex === undefined) {
+        return;
+      }
 
+      const currentBreak = orderedBreaks[currentBreakIndex];
+      const currentNode = currentBreak?.nodes[playerPosition.nodeIndex];
+      const isFinalBreak = currentBreakIndex === orderedBreaks.length - 1;
+      const isMapComplete =
+        Boolean(currentBreak) &&
+        isFinalBreak &&
+        Boolean(currentBreak.isBattle) &&
+        currentNode?.id === "battle";
+
+      if (!isMapComplete) {
+        return;
+      }
+
+      if (lastCompletedMapNumberRef.current === mapNumber) {
+        return;
+      }
+
+      lastCompletedMapNumberRef.current = mapNumber;
+      advanceToNextMap();
+    }, [
+      advanceToNextMap,
+      depthToIndex,
+      mapNumber,
+      orderedBreaks,
+      playerPosition.depth,
+      playerPosition.nodeIndex,
+    ]),
+  );
+
+  return (
+    <View style={styles.screen}>
       <ScrollView
         ref={mapScrollRef}
         style={styles.mapScroller}
@@ -340,6 +422,14 @@ export default function MapScreen() {
           >
             {connectionLines}
           </Svg>
+
+          <View
+            style={[styles.progressBadge, { borderColor: activeThemeColor }]}
+          >
+            <Text style={styles.progressBadgeText}>
+              Map {mapNumber} - Difficulty {levelDifficulty}
+            </Text>
+          </View>
 
           {[...orderedBreaks].reverse().map((row) => (
             <View
@@ -379,6 +469,7 @@ export default function MapScreen() {
                     key={nodeInstanceId}
                     style={[
                       styles.node,
+                      { backgroundColor: activeThemeColor },
                       row.isBattle && styles.battleNode,
                       nodeInstanceId === selectedNodeId && styles.selectedNode,
                       isNextReachable && styles.reachableNode,
@@ -391,11 +482,6 @@ export default function MapScreen() {
                         ...current,
                         currentDepth: row.depth,
                         selectedNodeId: nodeInstanceId,
-                        playerPosition: {
-                          depth: row.depth,
-                          nodeIndex: idx,
-                          nodeInstanceId,
-                        },
                       }));
                       if (row.isBattle) {
                         setTimeout(() => {
@@ -485,6 +571,17 @@ export default function MapScreen() {
           )}
         </View>
       </ScrollView>
+
+      <View style={styles.menuOverlay} pointerEvents="box-none">
+        <Pressable style={styles.menuButton} onPress={() => router.push("/")}>
+          <MaterialCommunityIcons
+            name="menu"
+            size={36}
+            color={activeThemeColor}
+          />
+        </Pressable>
+      </View>
+
       {/* Deck Modal */}
       <Modal
         visible={deckModalVisible}
@@ -516,10 +613,37 @@ export default function MapScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: "#02030a" },
-  mapScroller: { marginTop: 24, flex: 1 },
+  screen: {
+    flex: 1,
+    backgroundColor: "#02030a",
+  },
+  mapScroller: { flex: 1 },
   mapScrollerContent: { flexGrow: 1 },
+  menuOverlay: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    zIndex: 10,
+    elevation: 10,
+  },
+  menuButton: {
+    padding: 2,
+  },
   mapCanvas: { gap: 32, position: "relative", paddingBottom: 24 },
+  progressBadge: {
+    alignSelf: "center",
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 2,
+    borderRadius: 999,
+    backgroundColor: "rgba(2, 3, 10, 0.8)",
+  },
+  progressBadgeText: {
+    color: "#ffffff",
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
   tierRow: {
     flexDirection: "row",
     justifyContent: "space-evenly",

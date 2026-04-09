@@ -1,7 +1,14 @@
 import { Card, sigils } from "@/app/cards";
 import { TotemState, useGameRun } from "@/app/game-state";
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Animated,
   Dimensions,
@@ -19,11 +26,7 @@ import totemInsect from "../../assets/totem_insect_img.png";
 import totemReptile from "../../assets/totem_reptile_img.png";
 
 import { ThemedText } from "@/components/themed-text";
-import {
-  TOTEM_BODY_SIGIL_SIZE,
-  TotemBodyView,
-  TotemView,
-} from "@/components/totem-view";
+import { TotemBodyView, TotemView } from "@/components/totem-view";
 
 type TotemHeadClass = Exclude<Card["class"], "Miscellaneous">;
 
@@ -78,6 +81,7 @@ const buildOfferParts = (): TotemPartOffer[] => {
 export default function TotemScreen() {
   const router = useRouter();
   const { gameRun, setTotem } = useGameRun();
+  const [isOfferPhase, setIsOfferPhase] = useState(true);
   const [pickedHeadIndex, setPickedHeadIndex] = useState<number | null>(null);
   const [pickedBodyIndex, setPickedBodyIndex] = useState<number | null>(null);
   const [previewVisible, setPreviewVisible] = useState(false);
@@ -86,20 +90,40 @@ export default function TotemScreen() {
 
   const totemState = gameRun.totem;
   const offerParts = totemState.offerParts;
-  const hasAnyHead = totemState.collectedHeads.length > 0;
-  const hasAnyBody = totemState.collectedBodies.length > 0;
+  const hasAnyHead =
+    totemState.collectedHeads.length > 0 ||
+    (totemState.headClass !== null && totemState.headClass !== "Miscellaneous");
+  const hasAnyBody =
+    totemState.collectedBodies.length > 0 || Boolean(totemState.bodySigilName);
   const canAssemble = hasAnyHead && hasAnyBody;
 
-  useEffect(() => {
-    if (!canAssemble) {
-      setPickedHeadIndex(null);
-      setPickedBodyIndex(null);
+  useFocusEffect(
+    useCallback(() => {
+      setIsOfferPhase(true);
+      setPreviewVisible(false);
       setIsConfirming(false);
-    }
-  }, [canAssemble]);
+
+      return () => {
+        // Ensure modal/backdrop never survives route transitions.
+        setPreviewVisible(false);
+        setIsConfirming(false);
+      };
+    }, []),
+  );
 
   useEffect(() => {
-    if (canAssemble || offerParts.length > 0) {
+    if (!isOfferPhase) {
+      return;
+    }
+
+    setPickedHeadIndex(null);
+    setPickedBodyIndex(null);
+    setPreviewVisible(false);
+    setIsConfirming(false);
+  }, [isOfferPhase]);
+
+  useEffect(() => {
+    if (!isOfferPhase || offerParts.length > 0) {
       return;
     }
 
@@ -107,34 +131,57 @@ export default function TotemScreen() {
       ...current,
       offerParts: buildOfferParts(),
     }));
-  }, [canAssemble, offerParts.length, setTotem]);
+  }, [isOfferPhase, offerParts.length, setTotem]);
+
+  const availableHeads = useMemo(() => {
+    const heads = [...totemState.collectedHeads];
+    if (
+      totemState.headClass !== null &&
+      totemState.headClass !== "Miscellaneous" &&
+      !heads.includes(totemState.headClass)
+    ) {
+      heads.push(totemState.headClass);
+    }
+    return heads;
+  }, [totemState.collectedHeads, totemState.headClass]);
+
+  const availableBodies = useMemo(() => {
+    const bodies = [...totemState.collectedBodies];
+    if (
+      totemState.bodySigilName &&
+      !bodies.includes(totemState.bodySigilName)
+    ) {
+      bodies.push(totemState.bodySigilName);
+    }
+    return bodies;
+  }, [totemState.bodySigilName, totemState.collectedBodies]);
 
   const selectedHead = useMemo(
     () =>
       pickedHeadIndex === null
         ? null
-        : (totemState.collectedHeads[pickedHeadIndex] ?? null),
-    [pickedHeadIndex, totemState.collectedHeads],
+        : (availableHeads[pickedHeadIndex] ?? null),
+    [availableHeads, pickedHeadIndex],
   );
 
   const selectedBodySigilName = useMemo(
     () =>
       pickedBodyIndex === null
         ? null
-        : (totemState.collectedBodies[pickedBodyIndex] ?? null),
-    [pickedBodyIndex, totemState.collectedBodies],
+        : (availableBodies[pickedBodyIndex] ?? null),
+    [availableBodies, pickedBodyIndex],
   );
 
   const assembledParts = useMemo(
     () => [
-      ...totemState.collectedHeads.map((headClass, index) => ({
+      ...availableHeads.map((headClass, index) => ({
         kind: "head" as const,
         index,
         key: `head-${headClass}-${index}`,
         label: headClass,
         value: headClass,
       })),
-      ...totemState.collectedBodies.map((sigilName, index) => ({
+      ...availableBodies.map((sigilName, index) => ({
         kind: "body" as const,
         index,
         key: `body-${sigilName}-${index}`,
@@ -142,7 +189,7 @@ export default function TotemScreen() {
         value: sigilName,
       })),
     ],
-    [totemState.collectedBodies, totemState.collectedHeads],
+    [availableBodies, availableHeads],
   );
 
   const onPickOffer = (part: TotemPartOffer) => {
@@ -153,6 +200,21 @@ export default function TotemScreen() {
     setTotem((current) => {
       const nextHeads = [...current.collectedHeads];
       const nextBodies = [...current.collectedBodies];
+
+      if (
+        current.headClass !== null &&
+        current.headClass !== "Miscellaneous" &&
+        !nextHeads.includes(current.headClass)
+      ) {
+        nextHeads.push(current.headClass);
+      }
+
+      if (
+        current.bodySigilName &&
+        !nextBodies.includes(current.bodySigilName)
+      ) {
+        nextBodies.push(current.bodySigilName);
+      }
 
       if (part.kind === "head") {
         if (!nextHeads.includes(part.value)) {
@@ -170,13 +232,14 @@ export default function TotemScreen() {
       };
     });
 
+    setIsOfferPhase(false);
+
     const willHaveHead =
       hasAnyHead ||
-      (part.kind === "head" && !totemState.collectedHeads.includes(part.value));
+      (part.kind === "head" && !availableHeads.includes(part.value));
     const willHaveBody =
       hasAnyBody ||
-      (part.kind === "body" &&
-        !totemState.collectedBodies.includes(part.value));
+      (part.kind === "body" && !availableBodies.includes(part.value));
 
     if (!willHaveHead || !willHaveBody) {
       router.replace("/(tabs)/map");
@@ -220,8 +283,6 @@ export default function TotemScreen() {
       ...current,
       headClass: selectedHead,
       bodySigilName: selectedBodySigilName,
-      collectedHeads: [],
-      collectedBodies: [],
       offerParts: [],
     }));
 
@@ -233,6 +294,8 @@ export default function TotemScreen() {
       useNativeDriver: true,
     }).start(() => {
       setTimeout(() => {
+        setPreviewVisible(false);
+        setIsConfirming(false);
         router.replace("/(tabs)/map");
       }, 400);
     });
@@ -240,7 +303,7 @@ export default function TotemScreen() {
 
   return (
     <View style={styles.container}>
-      {!canAssemble ? (
+      {isOfferPhase ? (
         <>
           <View style={styles.offerRow}>
             {offerParts.map((part) => (
@@ -258,8 +321,10 @@ export default function TotemScreen() {
                 ) : (
                   <TotemBodyView
                     bodySigilName={part.value}
-                    sigilSize={TOTEM_BODY_SIGIL_SIZE}
+                    sigilOffsetX={-2}
+                    sigilOffsetY={18}
                     style={styles.offerBodyWrap}
+                    sigilSize={36}
                   />
                 )}
               </Pressable>
@@ -272,45 +337,51 @@ export default function TotemScreen() {
             Assemble Totem
           </ThemedText>
 
-          <ScrollView contentContainerStyle={styles.assembleScrollContent}>
-            <View style={styles.grid}>
-              {assembledParts.map((part) => {
-                const isSelected =
-                  part.kind === "head"
-                    ? pickedHeadIndex === part.index
-                    : pickedBodyIndex === part.index;
+          {canAssemble ? (
+            <ScrollView contentContainerStyle={styles.assembleScrollContent}>
+              <View style={styles.grid}>
+                {assembledParts.map((part) => {
+                  const isSelected =
+                    part.kind === "head"
+                      ? pickedHeadIndex === part.index
+                      : pickedBodyIndex === part.index;
 
-                return (
-                  <Pressable
-                    key={part.key}
-                    style={[
-                      styles.gridItem,
-                      isSelected && styles.gridItemSelected,
-                    ]}
-                    onPress={() =>
-                      part.kind === "head"
-                        ? onPickHead(part.index)
-                        : onPickBody(part.index)
-                    }
-                  >
-                    {part.kind === "head" ? (
-                      <Animated.Image
-                        source={TOTEM_HEAD_IMAGES[part.value as TotemHeadClass]}
-                        style={styles.gridPreview}
-                        resizeMode="stretch"
-                      />
-                    ) : (
-                      <TotemBodyView
-                        bodySigilName={part.value as string}
-                        sigilSize={TOTEM_BODY_SIGIL_SIZE}
-                        style={styles.gridPreview}
-                      />
-                    )}
-                  </Pressable>
-                );
-              })}
-            </View>
-          </ScrollView>
+                  return (
+                    <Pressable
+                      key={part.key}
+                      style={[
+                        styles.gridItem,
+                        isSelected && styles.gridItemSelected,
+                      ]}
+                      onPress={() =>
+                        part.kind === "head"
+                          ? onPickHead(part.index)
+                          : onPickBody(part.index)
+                      }
+                    >
+                      {part.kind === "head" ? (
+                        <Animated.Image
+                          source={
+                            TOTEM_HEAD_IMAGES[part.value as TotemHeadClass]
+                          }
+                          style={styles.gridPreview}
+                          resizeMode="stretch"
+                        />
+                      ) : (
+                        <TotemBodyView
+                          bodySigilName={part.value as string}
+                          sigilOffsetX={-2}
+                          sigilOffsetY={13}
+                          style={styles.gridPreview}
+
+                        />
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          ) : null}
         </>
       )}
 
@@ -369,32 +440,28 @@ const styles = StyleSheet.create({
     marginVertical: 24,
   },
   offerRow: {
-    width: "100%",
+    width: "50%",
     marginTop: 12,
-    flexDirection: "row",
+    flexDirection: "column",
     justifyContent: "space-between",
     gap: 10,
   },
   offerCard: {
-    flex: 1,
+    width: "100%",
+    aspectRatio: 1,
     backgroundColor: "#111111",
     borderRadius: 8,
     borderWidth: 2,
     borderColor: "#374151",
-    paddingVertical: 8,
-    paddingHorizontal: 6,
-    minHeight: 264,
-    alignItems: "center",
-    justifyContent: "flex-start",
-    gap: 5,
+    overflow: "hidden",
   },
   offerHeadImage: {
     width: "100%",
-    height: 78,
+    height: "100%",
   },
   offerBodyWrap: {
     width: "100%",
-    height: 78,
+    height: "100%",
   },
   assembleScrollContent: {
     flexGrow: 1,

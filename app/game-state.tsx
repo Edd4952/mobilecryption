@@ -12,6 +12,9 @@ import { cards, type Card } from "./cards";
 import { generateRandomMapState, type MapState } from "./map-generation";
 import { trinkets, type Trinket } from "./trinkets";
 
+export type LevelDifficulty = 1 | 2 | 3 | 4 | 5;
+export type MapThemeNumber = 1 | 2 | 3;
+
 export type TotemState = {
   headClass: Card["class"] | null;
   bodySigilName: string | null;
@@ -44,12 +47,16 @@ type GameRunState = {
   deck: Card[];
   trinkets: (Trinket | null)[];
   totem: TotemState;
+  mapNumber: number;
+  mapThemeNumber: MapThemeNumber;
+  levelDifficulty: LevelDifficulty;
   canContinue: boolean;
 };
 
 type GameRunContextValue = {
   gameRun: GameRunState;
   createNewGame: () => void;
+  advanceToNextMap: () => void;
   markRunEnded: () => void;
   setMapState: React.Dispatch<React.SetStateAction<MapState>>;
   setDeck: React.Dispatch<React.SetStateAction<Card[]>>;
@@ -68,6 +75,9 @@ const createInitialRunState = (): GameRunState => ({
     item ? { ...item } : null,
   ),
   totem: { ...DEFAULT_TOTEM },
+  mapNumber: 1,
+  mapThemeNumber: 1,
+  levelDifficulty: 1,
   canContinue: true,
 });
 
@@ -99,6 +109,13 @@ export const GameRunProvider = ({
         if (isMounted) {
           setGameRun({
             ...parsed,
+            map: parsed.map ?? generateRandomMapState(),
+            deck: parsed.deck ?? cards.slice(0, 3).map((card) => ({ ...card })),
+            trinkets:
+              parsed.trinkets ??
+              [trinkets[0], trinkets[1], null].map((item) =>
+                item ? { ...item } : null,
+              ),
             totem: {
               headClass: parsed.totem?.headClass ?? null,
               bodySigilName: parsed.totem?.bodySigilName ?? null,
@@ -106,6 +123,15 @@ export const GameRunProvider = ({
               collectedBodies: parsed.totem?.collectedBodies ?? [],
               offerParts: parsed.totem?.offerParts ?? [],
             },
+            mapNumber: Math.max(1, parsed.mapNumber ?? 1),
+            mapThemeNumber:
+              parsed.mapThemeNumber === 2 || parsed.mapThemeNumber === 3
+                ? parsed.mapThemeNumber
+                : 1,
+            levelDifficulty:
+              parsed.levelDifficulty && parsed.levelDifficulty >= 1
+                ? (Math.min(5, parsed.levelDifficulty) as LevelDifficulty)
+                : 1,
             canContinue: parsed.canContinue ?? true,
           });
         }
@@ -139,6 +165,21 @@ export const GameRunProvider = ({
 
   const createNewGame = () => {
     setGameRun(createInitialRunState());
+  };
+
+  const advanceToNextMap = () => {
+    setGameRun((current) => ({
+      ...current,
+      map: generateRandomMapState(),
+      mapNumber: current.mapNumber + 1,
+      mapThemeNumber:
+        current.mapThemeNumber === 1 ? 2 : current.mapThemeNumber === 2 ? 3 : 1,
+      levelDifficulty: Math.min(
+        5,
+        current.levelDifficulty + 1,
+      ) as LevelDifficulty,
+      canContinue: true,
+    }));
   };
 
   const markRunEnded = () => {
@@ -213,6 +254,7 @@ export const GameRunProvider = ({
     () => ({
       gameRun,
       createNewGame,
+      advanceToNextMap,
       markRunEnded,
       setMapState,
       setDeck,
@@ -221,7 +263,7 @@ export const GameRunProvider = ({
       appendCardToDeck,
       replaceDeckCardAt,
     }),
-    [gameRun],
+    [advanceToNextMap, gameRun],
   );
 
   return (

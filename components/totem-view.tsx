@@ -2,7 +2,7 @@ import { Card, sigilsByName } from "@/app/cards";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { Image } from "expo-image";
-import React from "react";
+import React, { useState } from "react";
 import { StyleProp, StyleSheet, View, ViewStyle } from "react-native";
 import totemAvian from "../assets/totem_avian_img.png";
 import totemBody from "../assets/totem_body_img.png";
@@ -38,8 +38,6 @@ const HEAD_IMAGES = {
 
 const BODY_IMAGE = totemBody;
 
-const sigilOffsetX = -2;
-const sigilOffsetY = 12;
 export const TOTEM_BODY_SIGIL_SIZE = 24;
 export const TOTEM_VIEW_SIGIL_SIZE_RATIO = 0.34;
 
@@ -74,26 +72,41 @@ const renderSigilIcon = (
 
 export function TotemBodyView({
   bodySigilName,
-  sigilSize = TOTEM_BODY_SIGIL_SIZE,
+  sigilSize: sigilSizeProp,
   sigilColor = "#ff0000",
+  sigilOffsetX = -2,
+  sigilOffsetY = 18,
   style,
 }: TotemBodyViewProps) {
+  const [containerHeight, setContainerHeight] = useState(0);
+
+  const sigilSize =
+    sigilSizeProp ??
+    (containerHeight > 0
+      ? Math.round(containerHeight * TOTEM_VIEW_SIGIL_SIZE_RATIO)
+      : TOTEM_BODY_SIGIL_SIZE);
+
   const sigilIcon = renderSigilIcon(bodySigilName, sigilSize, sigilColor);
 
   return (
-    <View style={style}>
+    <View
+      style={style}
+      onLayout={(e) => setContainerHeight(e.nativeEvent.layout.height)}
+    >
       <Image source={BODY_IMAGE} style={styles.fill} contentFit="fill" />
       {sigilIcon ? (
         <View
           pointerEvents="none"
           style={[
             styles.sigilOverlayCenter,
-            {
-              transform: [
-                { translateX: sigilOffsetX },
-                { translateY: sigilOffsetY },
-              ],
-            },
+            sigilOffsetX !== 0 || sigilOffsetY !== 0
+              ? {
+                  transform: [
+                    { translateX: sigilOffsetX },
+                    { translateY: sigilOffsetY },
+                  ],
+                }
+              : undefined,
           ]}
         >
           {sigilIcon}
@@ -121,7 +134,6 @@ export function TotemView({
       />
       <TotemBodyView
         bodySigilName={bodySigilName}
-        sigilSize={Math.round(size * TOTEM_VIEW_SIGIL_SIZE_RATIO)}
         style={{ width: size, height: bodyHeight }}
       />
     </View>

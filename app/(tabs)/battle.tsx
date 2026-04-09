@@ -27,13 +27,15 @@ import {
   View,
 } from "react-native";
 import { Card, cards, miscCards, sigils, sigilsByName } from "../cards";
-import { useGameRun } from "../game-state";
+import { useGameRun, type LevelDifficulty } from "../game-state";
 import { trinkets, type Trinket } from "../trinkets";
 
 type BattleCard = Card & {
   turnsOnBoard?: number;
   fledglingUsed?: boolean;
 };
+
+type TotemHeadClass = Exclude<Card["class"], "Miscellaneous">;
 
 type LevelTypeName =
   | "hooved"
@@ -43,8 +45,6 @@ type LevelTypeName =
   | "birds"
   | "reptiles"
   | "one bear";
-
-type LevelDifficulty = 1 | 2 | 3 | 4 | 5;
 
 const MIN_SPAWN_ROUNDS = 5;
 const MAX_SPAWN_ROUNDS = 10;
@@ -90,6 +90,17 @@ const LEVEL_TYPE_NAMES = Object.keys(LEVEL_POOLS) as LevelTypeName[];
 
 const ANT_RULE_KEY = "Ant Power";
 
+const TOTEM_HEAD_ICONS: Record<
+  TotemHeadClass,
+  keyof typeof MaterialCommunityIcons.glyphMap
+> = {
+  Avian: "bird",
+  Canine: "dog",
+  Insect: "bug",
+  Reptile: "tortoise",
+  Hooved: "horseshoe",
+};
+
 export default function Battle() {
   const router = useRouter();
   const { gameRun, markRunEnded, setTrinkets } = useGameRun();
@@ -108,6 +119,7 @@ export default function Battle() {
   const [gameOver, setGameOver] = useState(false);
   const [gameResult, setGameResult] = useState<"win" | "lose" | null>(null);
   const [isTrinketModalVisible, setIsTrinketModalVisible] = useState(false);
+  const [isTotemModalVisible, setIsTotemModalVisible] = useState(false);
   const [isRulebookVisible, setIsRulebookVisible] = useState(false);
   const [rulebookTargetKey, setRulebookTargetKey] = useState<string | null>(
     null,
@@ -153,7 +165,7 @@ export default function Battle() {
   const [levelType, setLevelType] = useState<LevelTypeName>(
     () => LEVEL_TYPE_NAMES[randomInt(0, LEVEL_TYPE_NAMES.length - 1)],
   );
-  const [levelDifficulty] = useState<LevelDifficulty>(1);
+  const levelDifficulty = gameRun.levelDifficulty;
   ////////////////////////////////////////////////////////////
   const squirrelCard = useMemo(
     () => miscCards.find((card) => card.name === "Squirrel") ?? null,
@@ -254,6 +266,32 @@ export default function Battle() {
         name={trinket.icon as keyof typeof MaterialCommunityIcons.glyphMap}
         size={70}
         color="#ffffff"
+      />
+    );
+  };
+
+  const renderTotemSigilIcon = (size: number, color: string) => {
+    if (!totemBodySigil) {
+      return null;
+    }
+
+    if (totemBodySigil.iconLibrary === "FontAwesome6") {
+      return (
+        <FontAwesome6
+          name={totemBodySigil.icon as keyof typeof FontAwesome6.glyphMap}
+          size={size}
+          color={color}
+        />
+      );
+    }
+
+    return (
+      <MaterialCommunityIcons
+        name={
+          totemBodySigil.icon as keyof typeof MaterialCommunityIcons.glyphMap
+        }
+        size={size}
+        color={color}
       />
     );
   };
@@ -1445,7 +1483,7 @@ export default function Battle() {
         <View style={styles.scoreBoard}>
           <ThemedText
             type="title"
-            style={{ color: "#fff", textAlign: "center", lineHeight: 80 }}
+            style={{ color: "#ebf920", textAlign: "center", lineHeight: 80 }}
           >
             {score}
           </ThemedText>
@@ -1585,7 +1623,7 @@ export default function Battle() {
                 backgroundColor: "#ffe45c",
                 borderRadius: 4,
                 height: 92,
-                width: 92,
+                width: 60,
                 justifyContent: "center",
                 alignItems: "center",
               }}
@@ -1619,13 +1657,20 @@ export default function Battle() {
               </Pressable>
             </View>
             {totemHeadClass && totemBodySigil ? (
-              <TotemView
-                headClass={
-                  totemHeadClass as Exclude<Card["class"], "Miscellaneous">
-                }
-                bodySigilName={totemBodySigil.name}
-                size={38}
-              />
+              <Pressable
+                style={styles.totemButtonCompact}
+                onPress={() => setIsTotemModalVisible(true)}
+                disabled={isAnimating}
+              >
+                <MaterialCommunityIcons
+                  name={TOTEM_HEAD_ICONS[totemHeadClass as TotemHeadClass]}
+                  size={34}
+                  color="#ffffff"
+                />
+                <View style={styles.totemButtonSigilRow}>
+                  {renderTotemSigilIcon(22, "#ffffff")}
+                </View>
+              </Pressable>
             ) : null}
           </View>
 
@@ -1636,7 +1681,7 @@ export default function Battle() {
             <Pressable
               style={{
                 padding: 12,
-                backgroundColor: "#ff8a5c",
+                backgroundColor: "#b28920",
                 borderRadius: 4,
                 height: 92,
                 width: 69,
@@ -1677,6 +1722,12 @@ export default function Battle() {
         </View>
       </ScrollView>
 
+      <View style={styles.menuOverlay} pointerEvents="box-none">
+        <Pressable style={styles.menuButton} onPress={() => router.push("/")}>
+          <MaterialCommunityIcons name="menu" size={36} color="#af721d" />
+        </Pressable>
+      </View>
+
       {gameOver && gameResult && (
         <View style={styles.gameOverOverlay}>
           <View style={styles.gameOverCard}>
@@ -1694,6 +1745,32 @@ export default function Battle() {
           </View>
         </View>
       )}
+
+      <Modal
+        visible={isTotemModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsTotemModalVisible(false)}
+      >
+        <View style={styles.totemModalBackdrop}>
+          <Pressable
+            style={StyleSheet.absoluteFillObject}
+            onPress={() => setIsTotemModalVisible(false)}
+          />
+
+          <View pointerEvents="box-none" style={styles.totemModalCenterWrap}>
+            {totemHeadClass && totemBodySigil ? (
+              <TotemView
+                headClass={
+                  totemHeadClass as Exclude<Card["class"], "Miscellaneous">
+                }
+                bodySigilName={totemBodySigil.name}
+                size={150}
+              />
+            ) : null}
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={isTrinketModalVisible}
@@ -1822,6 +1899,16 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  menuOverlay: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    zIndex: 10,
+    elevation: 10,
+  },
+  menuButton: {
+    padding: 2,
+  },
   container: {
     flexGrow: 1,
     padding: 16,
@@ -1831,7 +1918,7 @@ const styles = StyleSheet.create({
   },
   table: {
     width: "100%",
-    marginTop: 96,
+    marginTop: 64,
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
@@ -1842,8 +1929,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     top: 0,
-    borderWidth: 5,
-    borderColor: "#ebf920",
     width: "100%",
     height: 80,
   },
@@ -1891,7 +1976,7 @@ const styles = StyleSheet.create({
   },
   boneTrinketStack: {
     height: 92,
-    minWidth: 76,
+    minWidth: 60,
     justifyContent: "space-between",
     alignItems: "center",
   },
@@ -1924,6 +2009,23 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 11,
   },
+  totemButtonCompact: {
+    minWidth: 38,
+    height: 92,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: "#fecaca",
+    backgroundColor: "#b91c1c",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  totemButtonSigilRow: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
   trinketSlot: {
     width: 88,
     minHeight: 78,
@@ -1952,6 +2054,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 24,
+  },
+  totemModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.82)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  totemModalCenterWrap: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   trinketModalCard: {
     width: "100%",
